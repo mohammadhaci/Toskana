@@ -1,0 +1,26 @@
+# Toskana configuration example.
+# Copy to ./config.yaml (or point TOSKANA_CONFIG at a custom path).
+# Every field can also be overridden via environment variables with the
+# TOSKANA_ prefix, e.g. TOSKANA_PORT=9000 (env vars win over this file).
+
+# Slug of the restaurant this site instance serves (see `toskana seed`).
+active_restaurant_slug: toskana
+
+# HTTP server bind address for the dashboard/API.
+host: 127.0.0.1
+port: 8420
+
+# SQLite database file (WAL mode is enabled automatically).
+db_path: ./toskana.db
+
+# Where per-event audit snapshots (JPEG) are stored.
+snapshots_dir: ./data/snapshots
+
+# Snapshots older than this many days are deleted by the retention job (GDPR).
+snapshot_retention_days: 30
+
+# Inference device: auto (cuda -> mps -> cpu), or force cpu/cuda/mps.
+device: auto
+
+# Logging level: DEBUG, INFO, WARNING, ERROR.
+log_level: INFO

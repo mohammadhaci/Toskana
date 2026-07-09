@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e .[dev]
+      - name: Ruff (lint + format)
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Mypy
+        run: mypy
+      - name: Pytest (excludes @ml and @slow)
+        run: pytest -q
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for web app
+        id: web
+        run: |
+          if [ -f web/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "web/ not present yet (added in M5) — skipping"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.web.outputs.present == 'true'
+        with:
+          node-version: "22"
+      - name: Build & test web
+        if: steps.web.outputs.present == 'true'
+        run: |
+          cd web
+          npm ci
+          npm run build
+          npm test --if-present

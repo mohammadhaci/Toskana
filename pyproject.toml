@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toskana"
+version = "0.1.0"
+description = "Local-first pass-through counter: AI vision counts food/drinks crossing a virtual line."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy>=2",
+    "alembic",
+    "pydantic-settings",
+    "numpy",
+    "opencv-python-headless",
+    "pyyaml",
+    "python-ulid",
+    "pillow",
+    "python-multipart",
+]
+
+[project.optional-dependencies]
+ml = [
+    "torch",
+    "torchvision",
+    "ultralytics",
+]
+train = [
+    "yt-dlp",
+    "imagehash",
+    "scikit-image",
+]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "hypothesis",
+    "ruff",
+    "mypy",
+]
+
+[project.scripts]
+toskana = "toskana.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = '-m "not ml and not slow"'
+markers = [
+    "ml: tests requiring ML dependencies (torch/ultralytics) or model weights",
+    "slow: long-running tests (smoke training, endurance)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+no_strict_optional = false
+warn_unused_ignores = false
+files = ["src/toskana"]

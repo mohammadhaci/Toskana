@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# App data
+*.db
+*.db-wal
+*.db-shm
+data/
+runs/
+
+# Model weights (keep directory structure)
+models/*
+!models/.gitkeep
+
+# Node / frontend
+node_modules/
+web/dist/
+web/node_modules/
+
+# Misc
+.DS_Store
+*.log
