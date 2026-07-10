@@ -31,7 +31,7 @@ from sqlalchemy import select
 
 from toskana.api.timeutils import local_day_bounds, local_today
 from toskana.db.models import Category, Event, Restaurant
-from toskana.events.bus import TOPIC_CORRECTION, TOPIC_CROSSING, TOPIC_GAP, EventBus
+from toskana.events.bus import TOPIC_CORRECTION, TOPIC_CROSSING, TOPIC_DRIFT, TOPIC_GAP, EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,9 @@ _CROSSING_KEYS = (
 )
 
 _GAP_KEYS = ("restaurant_id", "camera_id", "from_ts", "to_ts", "reason")
+
+#: drift payload keys forwarded to WS clients.
+_DRIFT_KEYS = ("restaurant_id", "camera_id", "score", "drift_ok", "ts")
 
 #: dedup_correction payload keys forwarded to WS clients.
 _CORRECTION_KEYS = (
@@ -92,6 +95,7 @@ class LiveBroadcaster:
         self._unsubscribes.append(self._bus.subscribe(TOPIC_CROSSING, self._on_crossing))
         self._unsubscribes.append(self._bus.subscribe(TOPIC_GAP, self._on_gap))
         self._unsubscribes.append(self._bus.subscribe(TOPIC_CORRECTION, self._on_correction))
+        self._unsubscribes.append(self._bus.subscribe(TOPIC_DRIFT, self._on_drift))
 
     def stop(self) -> None:
         for unsubscribe in self._unsubscribes:
@@ -130,6 +134,11 @@ class LiveBroadcaster:
         """A dedup demotion: live counters must decrement this event."""
         correction = {key: payload[key] for key in _CORRECTION_KEYS if key in payload}
         self._dispatch({"type": "correction", **correction})
+
+    def _on_drift(self, payload: dict[str, Any]) -> None:
+        """A camera drift alarm was raised or cleared (M10 watchdog)."""
+        drift = {key: payload[key] for key in _DRIFT_KEYS if key in payload}
+        self._dispatch({"type": "drift", **drift})
 
     def _dispatch(self, message: dict[str, Any]) -> None:
         loop = self._loop

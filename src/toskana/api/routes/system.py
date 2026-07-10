@@ -12,6 +12,7 @@ from toskana import __version__
 from toskana.api import schemas
 from toskana.api.deps import ConfigDep, ManagerDep, SessionDep
 from toskana.db.models import Restaurant
+from toskana.vision.presets import resolve_preset
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -53,6 +54,7 @@ def info(session: SessionDep, config: ConfigDep) -> schemas.SystemInfo:
 
     db_file = Path(config.db_path)
     db_size = db_file.stat().st_size if db_file.is_file() else None
+    preset = resolve_preset(config.performance_preset, cuda=cuda_available)
 
     active: Restaurant | None
     try:
@@ -76,4 +78,9 @@ def info(session: SessionDep, config: ConfigDep) -> schemas.SystemInfo:
         device=config.device,
         loop_file_sources=config.loop_file_sources,
         snapshots_dir=config.snapshots_dir,
+        snapshot_retention_days=config.snapshot_retention_days,
+        performance_preset=config.performance_preset,
+        performance_preset_resolved=preset.name,
+        preset_imgsz=preset.imgsz,
+        preset_frame_skip=preset.frame_skip,
     )

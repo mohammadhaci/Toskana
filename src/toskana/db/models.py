@@ -381,6 +381,10 @@ class CountingEvalRun(Base):
         ForeignKey("models_registry.id", ondelete="SET NULL"), default=None
     )
     ground_truth_path: Mapped[str | None] = mapped_column(String(1000), default=None)
+    video_ref: Mapped[str | None] = mapped_column(String(2000), default=None)
+    config_json: Mapped[str | None] = mapped_column(Text, default=None)  # CLI/backend/line config
+    gt_counts_json: Mapped[str | None] = mapped_column(Text, default=None)
+    measured_counts_json: Mapped[str | None] = mapped_column(Text, default=None)
     metrics_json: Mapped[str] = mapped_column(Text)  # precision/recall/MAE per category & hour
     notes: Mapped[str | None] = mapped_column(Text, default=None)
 

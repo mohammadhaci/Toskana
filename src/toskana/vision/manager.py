@@ -21,6 +21,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -31,10 +32,12 @@ from toskana.config import AppConfig
 from toskana.db.models import Camera, Category, ClassMapping, Line, ModelRegistry, Restaurant
 from toskana.events.bus import TOPIC_GAP, EventBus
 from toskana.vision.detector import TrackedDetection
+from toskana.vision.drift import DriftDetector
 from toskana.vision.line_crossing import LineSpec
 from toskana.vision.mapping import MappingRule
 from toskana.vision.overlay import encode_jpeg, render_live
 from toskana.vision.pipeline import CameraPipeline, PipelineSpec
+from toskana.vision.presets import MIN_HEALTHY_FPS, resolve_preset
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,10 @@ logger = logging.getLogger(__name__)
 _PREVIEW_MIN_INTERVAL_S = 0.09
 #: Sliding window size for the measured-FPS estimate.
 _FPS_WINDOW = 30
+#: Seconds after camera start when the measured FPS is logged (warn < 8).
+_FPS_CHECK_DELAY_S = 5.0
+#: Drift check cadence: this many seconds worth of frames between SSIM checks.
+_DRIFT_CHECK_PERIOD_S = 300
 
 
 class CameraNotRegistered(KeyError):
@@ -67,6 +74,10 @@ class _ManagedCamera:
     frame_times: deque[float] = field(default_factory=lambda: deque(maxlen=_FPS_WINDOW))
     #: (jpeg bytes, sequence number) — replaced atomically, read lock-free.
     latest: tuple[bytes, int] | None = None
+    #: Latest raw BGR frame (replaced atomically; drift recalibration source).
+    latest_frame: np.ndarray | None = None
+    drift: DriftDetector | None = None
+    fps_check_timer: threading.Timer | None = None
     _last_encode_mono: float = 0.0
 
     @property
@@ -149,7 +160,15 @@ class PipelineManager:
                     raise CameraNotRegistered(camera_id)
                 spec = self._build_spec(session, camera)
                 name = camera.name
+                target_fps = camera.target_fps
             entry = _ManagedCamera(camera_id=camera_id, name=name, spec=spec, pipeline=None)  # type: ignore[arg-type]
+            entry.drift = DriftDetector(
+                camera_id,
+                Path(self._config.snapshots_dir) / "calibration",
+                restaurant_id=spec.restaurant_id,
+                bus=self._bus,
+                check_interval_frames=max(1, target_fps * _DRIFT_CHECK_PERIOD_S),
+            )
             entry.pipeline = CameraPipeline(
                 spec,
                 bus=self._bus,
@@ -164,6 +183,11 @@ class PipelineManager:
             entry.started_ts = int(time.time() * 1000)
             self._entries[camera_id] = entry
             entry.thread.start()
+            entry.fps_check_timer = threading.Timer(
+                _FPS_CHECK_DELAY_S, self._log_startup_fps, args=(entry,)
+            )
+            entry.fps_check_timer.daemon = True
+            entry.fps_check_timer.start()
 
     def stop_camera(self, camera_id: int, *, join_timeout_s: float = 5.0) -> bool:
         """Request stop and wait for the thread; returns True if it was running."""
@@ -172,6 +196,8 @@ class PipelineManager:
         if entry is None:
             return False
         was_running = entry.running
+        if entry.fps_check_timer is not None:
+            entry.fps_check_timer.cancel()
         entry.pipeline.stop()
         if entry.thread is not None:
             entry.thread.join(join_timeout_s)
@@ -231,8 +257,25 @@ class PipelineManager:
             return None
         return entry.latest
 
+    def calibrate_camera(self, camera_id: int) -> dict[str, Any] | None:
+        """Re-capture the drift calibration reference from the current frame.
+
+        Returns the camera's status dict, or None when the camera has never
+        produced a frame (nothing to calibrate from yet).
+        """
+        with self._lock:
+            entry = self._entries.get(camera_id)
+        if entry is None or entry.drift is None:
+            return None
+        frame = entry.latest_frame
+        if frame is None:
+            return None
+        entry.drift.calibrate(frame)
+        return self._entry_status(entry)
+
     @staticmethod
     def _entry_status(entry: _ManagedCamera) -> dict[str, Any]:
+        drift = entry.drift.status if entry.drift is not None else None
         return {
             "camera_id": entry.camera_id,
             "name": entry.name,
@@ -246,7 +289,29 @@ class PipelineManager:
             "source_type": entry.spec.source_type,
             "started_ts": entry.started_ts,
             "last_error": entry.last_error,
+            "drift_ok": drift.drift_ok if drift is not None else None,
+            "drift_score": drift.drift_score if drift is not None else None,
         }
+
+    def _log_startup_fps(self, entry: _ManagedCamera) -> None:
+        """~5 s after start: log the measured FPS, warn when it is too low."""
+        if not entry.running:
+            return
+        fps = entry.measured_fps
+        if fps < MIN_HEALTHY_FPS:
+            logger.warning(
+                "camera %s (%s) measured %.1f FPS after startup — below %.0f FPS; "
+                "counting accuracy degrades. Consider performance_preset=cpu "
+                "(imgsz 480, frame skip 2), a lower camera resolution, or a GPU.",
+                entry.camera_id,
+                entry.name,
+                fps,
+                MIN_HEALTHY_FPS,
+            )
+        else:
+            logger.info(
+                "camera %s (%s) measured %.1f FPS after startup", entry.camera_id, entry.name, fps
+            )
 
     # -- pipeline thread -----------------------------------------------------------
 
@@ -281,6 +346,9 @@ class PipelineManager:
             now_mono = time.monotonic()
             entry.frame_times.append(now_mono)
             entry.last_frame_ts = int(time.time() * 1000)
+            entry.latest_frame = frame
+            if entry.drift is not None:
+                entry.drift.observe(frame)
             if now_mono - entry._last_encode_mono < _PREVIEW_MIN_INTERVAL_S:
                 return  # cap preview encoding at ~10 fps
             entry._last_encode_mono = now_mono
@@ -314,6 +382,10 @@ class PipelineManager:
         if camera.source_type == "usb":
             source = int(camera.source_url)
         is_file = camera.source_type == "file"
+        preset = resolve_preset(self._config.performance_preset)
+        # The synthetic (CI/demo) backend always processes every frame so
+        # scenario counts stay deterministic; presets tune YOLO only.
+        frame_skip = preset.frame_skip if backend == "yolo" else 1
         return PipelineSpec(
             restaurant_id=camera.restaurant_id,
             camera_id=camera.id,
@@ -328,6 +400,8 @@ class PipelineManager:
             lines=lines,
             mapping_rules=rules,
             snapshots_dir=self._config.snapshots_dir,
+            frame_skip=frame_skip,
+            imgsz=preset.imgsz,
         )
 
     @staticmethod

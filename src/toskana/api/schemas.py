@@ -168,6 +168,9 @@ class CameraStatus(APIModel):
     source_type: str | None = None
     started_ts: int | None = None
     last_error: str | None = None
+    #: M10 drift watchdog: None = not calibrated yet / camera never started.
+    drift_ok: bool | None = None
+    drift_score: float | None = None  # last SSIM score vs the calibration snapshot
 
 
 # -- lines ----------------------------------------------------------------------
@@ -506,6 +509,12 @@ class SystemInfo(APIModel):
     device: str
     loop_file_sources: bool
     snapshots_dir: str
+    snapshot_retention_days: int
+    #: Configured preset (cpu|gpu|auto) and what it resolved to on this host.
+    performance_preset: str
+    performance_preset_resolved: str
+    preset_imgsz: int
+    preset_frame_skip: int
 
 
 class MessageResponse(APIModel):

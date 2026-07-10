@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -40,6 +41,16 @@ class AppConfig(BaseSettings):
     log_level: str = "INFO"
     detector_backend: str = "synthetic"  # synthetic | yolo
     loop_file_sources: bool = True  # demo mode: file cameras loop (paced) forever
+    # Hardware tuning for the YOLO backend: cpu (imgsz 480, every 2nd frame),
+    # gpu (imgsz 640, every frame) or auto (gpu when CUDA is available).
+    performance_preset: str = "auto"  # cpu | gpu | auto
+
+    @field_validator("performance_preset")
+    @classmethod
+    def _known_preset(cls, value: str) -> str:
+        if value.strip().lower() not in ("cpu", "gpu", "auto"):
+            raise ValueError(f"performance_preset must be cpu, gpu or auto: {value!r}")
+        return value.strip().lower()
 
     @classmethod
     def settings_customise_sources(

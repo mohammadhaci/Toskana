@@ -129,6 +129,21 @@ def camera_status(camera_id: int, session: SessionDep, manager: ManagerDep) -> s
     return _status_response(camera_id, manager)
 
 
+@router.post("/cameras/{camera_id}/calibrate", response_model=schemas.CameraStatus)
+def calibrate_camera(
+    camera_id: int, session: SessionDep, manager: ManagerDep
+) -> schemas.CameraStatus:
+    """Re-capture the drift-detection reference from the camera's current frame."""
+    camera_or_404(session, camera_id)
+    status = manager.calibrate_camera(camera_id)
+    if status is None:
+        raise HTTPException(
+            status_code=409,
+            detail="camera has no live frame to calibrate from (pipeline not running yet)",
+        )
+    return schemas.CameraStatus(**status)
+
+
 def _status_response(camera_id: int, manager: ManagerDep) -> schemas.CameraStatus:
     status = manager.camera_status(camera_id)
     if status is None:

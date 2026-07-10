@@ -60,6 +60,15 @@ class PipelineSpec:
     lines: tuple[LineSpec, ...] = ()
     mapping_rules: tuple[MappingRule, ...] = ()
     snapshots_dir: str | None = None
+    #: Performance preset knobs (see :mod:`toskana.vision.presets`):
+    #: process every ``frame_skip``-th frame (1 = every frame) and run the
+    #: YOLO backend at ``imgsz`` inference resolution.
+    frame_skip: int = 1
+    imgsz: int = 640
+
+    def __post_init__(self) -> None:
+        if self.frame_skip < 1:
+            raise ValueError(f"frame_skip must be >= 1: {self.frame_skip}")
 
 
 @dataclass
@@ -74,6 +83,8 @@ class PipelineResult:
         default_factory=lambda: {"positive": {}, "negative": {}}
     )
     gaps: int = 0
+    #: Frames dropped by the ``frame_skip`` performance preset (not processed).
+    frames_skipped: int = 0
 
     def add(self, crossing: CrossingEvent, payload: dict[str, Any]) -> None:
         self.crossings.append(crossing)
@@ -96,7 +107,7 @@ def make_tracking_backend(spec: PipelineSpec) -> TrackingBackend:
     if spec.backend == "yolo":
         from toskana.vision.backends.yolo import YoloBackend
 
-        return YoloBackend(spec.model_path, device=spec.device)
+        return YoloBackend(spec.model_path, device=spec.device, imgsz=spec.imgsz)
     raise ValueError(f"unknown backend: {spec.backend!r}")
 
 
@@ -166,6 +177,9 @@ class CameraPipeline:
             for frame_index, _mono_ts, frame in source:
                 if self._stop_requested.is_set():
                     break
+                if spec.frame_skip > 1 and frame_index % spec.frame_skip != 0:
+                    result.frames_skipped += 1
+                    continue  # performance preset: process every Nth frame
                 if not self.counters:
                     height, width = frame.shape[:2]
                     self.counters = [

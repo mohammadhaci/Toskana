@@ -25,6 +25,9 @@ TOPIC_DEMOTE = "demote"
 #: DedupEngine -> /ws/live: an optimistically-canonical event was demoted;
 #: forwarded to clients as ``{type: "correction", ...}``.
 TOPIC_CORRECTION = "dedup_correction"
+#: DriftDetector -> /ws/live + monitoring: a camera drift alarm was raised
+#: (or cleared); forwarded to clients as ``{type: "drift", ...}``.
+TOPIC_DRIFT = "drift"
 
 
 class EventBus:
