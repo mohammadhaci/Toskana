@@ -32,6 +32,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
+from starlette.types import Scope
 
 from toskana import __version__
 from toskana.api import ws as ws_module
@@ -48,6 +51,32 @@ logger = logging.getLogger(__name__)
 #: Local dev origins (Vite dev server etc.); the built dashboard is
 #: same-origin and needs no CORS.
 CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+
+class SPAStaticFiles(StaticFiles):
+    """Static files with an SPA fallback: unknown extensionless paths serve
+    ``index.html`` so deep links into the dashboard (``/stats``,
+    ``/admin/cameras`` …) survive a hard reload. ``/api`` and ``/ws`` routes
+    are matched before this mount and are unaffected."""
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404 and self._is_spa_route(path):
+                return await super().get_response("index.html", scope)
+            raise
+        if response.status_code == 404 and self._is_spa_route(path):
+            return await super().get_response("index.html", scope)
+        return response
+
+    @staticmethod
+    def _is_spa_route(path: str) -> bool:
+        """Dashboard route (extensionless, not API/WS/docs namespace)."""
+        normalized = path.lstrip("/")
+        if normalized.split("/", 1)[0] in ("api", "ws", "docs", "openapi.json", "redoc"):
+            return False
+        return "." not in normalized.rsplit("/", 1)[-1]
 
 
 def find_web_dist() -> Path | None:
@@ -118,7 +147,7 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
 
     web_dist = find_web_dist()
     if web_dist is not None:
-        app.mount("/", StaticFiles(directory=web_dist, html=True), name="dashboard")
+        app.mount("/", SPAStaticFiles(directory=web_dist, html=True), name="dashboard")
     else:
 
         @app.get("/", include_in_schema=False)

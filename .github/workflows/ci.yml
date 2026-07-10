@@ -27,25 +27,21 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v4
-      - name: Check for web app
-        id: web
-        run: |
-          if [ -f web/package.json ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "web/ not present yet (added in M5) — skipping"
-          fi
       - uses: actions/setup-node@v4
-        if: steps.web.outputs.present == 'true'
         with:
           node-version: "22"
-      - name: Build & test web
-        if: steps.web.outputs.present == 'true'
-        run: |
-          cd web
-          npm ci
-          npm run build
-          npm test --if-present
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Check (tsc --noEmit + i18n key parity)
+        run: npm run check
+      - name: Vitest
+        run: npm test
+      - name: Build (tsc + vite build)
+        run: npm run build
