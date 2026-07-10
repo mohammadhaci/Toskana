@@ -6,7 +6,10 @@ import type {
   AnalysisJobCreate,
   Camera,
   CameraCreate,
+  CameraPreset,
   CameraStatus,
+  CameraTestResult,
+  CameraTestSourceRequest,
   CameraUpdate,
   Category,
   CategoryCreate,
@@ -123,6 +126,9 @@ export const api = {
   restartCamera: (id: number) => request<CameraStatus>(`/cameras/${id}/restart`, { method: "POST" }),
   calibrateCamera: (id: number) =>
     request<CameraStatus>(`/cameras/${id}/calibrate`, { method: "POST" }),
+  listCameraPresets: () => request<CameraPreset[]>("/camera-presets"),
+  testCameraSource: (rid: number, body: CameraTestSourceRequest) =>
+    request<CameraTestResult>(`/restaurants/${rid}/cameras/test-source`, json(body, "POST")),
 
   // -- lines ---------------------------------------------------------------------
   listLines: (cameraId: number) => request<Page<Line>>(`/cameras/${cameraId}/lines${PAGE_ALL}`),

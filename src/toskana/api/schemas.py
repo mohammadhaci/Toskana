@@ -153,6 +153,65 @@ class CameraRead(ORMModel):
     enabled: bool
 
 
+class CameraPresetRead(APIModel):
+    """One vendor entry for the wizard dropdown (GET /camera-presets)."""
+
+    key: str
+    label: str
+    default_port: int
+    needs_channel: bool
+    #: Template with {user}/{password}/{ip}/{port}/{channel} placeholders;
+    #: None for the generic (manual URL) preset. The client renders a
+    #: masked preview from it; the real URL is built server-side.
+    url_template: str | None
+
+
+class CameraTestSource(APIModel):
+    """Body of POST .../cameras/test-source.
+
+    Two mutually supporting shapes: a raw source (``source_type`` +
+    ``source_url``) or vendor-preset fields (``preset_key`` + ``ip`` + …).
+    Preset fields keep the password out of any browser-built URL: the
+    server builds and probes the URL and only echoes a masked form.
+    """
+
+    source_type: Literal["rtsp", "usb", "file"] | None = None
+    source_url: str | None = Field(default=None, max_length=1000)
+    preset_key: str | None = None
+    ip: str | None = Field(default=None, max_length=253)
+    username: str = Field(default="", max_length=128)
+    password: str = Field(default="", max_length=128)
+    port: int | None = Field(default=None, ge=1, le=65535)
+    channel: int = Field(default=1, ge=1, le=64)
+
+    @model_validator(mode="after")
+    def _one_shape(self) -> CameraTestSource:
+        raw = self.source_type is not None and bool(self.source_url and self.source_url.strip())
+        preset = self.preset_key is not None
+        if not raw and not preset:
+            raise ValueError("provide source_type+source_url or preset_key+ip")
+        if self.source_type == "usb" and not str(self.source_url).strip().isdigit():
+            raise ValueError("usb source_url must be a numeric device index")
+        return self
+
+
+class CameraTestResult(APIModel):
+    """Probe outcome (always HTTP 200 — a failed probe is a result, not an error)."""
+
+    ok: bool
+    source_type: str
+    #: The probed URL with the password masked (never the real password).
+    source_url_masked: str | None = None
+    #: On success: the full source URL to store when saving the camera.
+    #: Contains the percent-encoded credentials the server built.
+    source_url: str | None = None
+    width: int | None = None
+    height: int | None = None
+    fps: float | None = None
+    snapshot_b64: str | None = None  # JPEG, downscaled to <= 480 px wide
+    error: str | None = None
+
+
 class CameraStatus(APIModel):
     """Live pipeline status for one camera (all-None fields = never started)."""
 

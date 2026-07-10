@@ -13,6 +13,7 @@ import {
 import type { Camera, ExitGroup, SourceType } from "../../api/types";
 import { useToast } from "../../components/Toast";
 import { Badge, Card, EmptyState, Skeleton } from "../../components/ui";
+import CameraWizard from "./CameraWizard";
 
 function CameraAdminCard({
   camera,
@@ -164,15 +165,9 @@ function CameraAdminCard({
 
 export default function CamerasPage() {
   const { t } = useTranslation();
-  const toast = useToast();
   const rid = useActiveRestaurantId();
   const { data: cameras, isLoading } = useCameras(rid);
   const { data: exitGroups } = useExitGroups(rid);
-  const { create } = useCameraMutations(rid, {
-    onError: (e) => toast.error(e.message),
-    onSuccess: () => toast.success(t("common.saved")),
-  });
-  const [form, setForm] = useState({ name: "", source_type: "rtsp" as SourceType, source_url: "", target_fps: 15 });
 
   return (
     <>
@@ -193,52 +188,7 @@ export default function CamerasPage() {
           ))}
       </div>
 
-      <Card title={t("admin.cameras.createTitle")}>
-        <div className="form-grid">
-          <div className="field">
-            <label>{t("common.name")}</label>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div className="field">
-            <label>{t("admin.cameras.sourceType")}</label>
-            <select
-              value={form.source_type}
-              onChange={(e) => setForm({ ...form, source_type: e.target.value as SourceType })}
-            >
-              <option value="rtsp">RTSP</option>
-              <option value="usb">USB</option>
-              <option value="file">File</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>{t("admin.cameras.sourceUrl")}</label>
-            <input
-              value={form.source_url}
-              onChange={(e) => setForm({ ...form, source_url: e.target.value })}
-              placeholder="rtsp://…"
-            />
-          </div>
-          <div className="field">
-            <label>{t("admin.cameras.targetFps")}</label>
-            <input
-              type="number"
-              min={1}
-              max={120}
-              value={form.target_fps}
-              onChange={(e) => setForm({ ...form, target_fps: Number(e.target.value) })}
-            />
-          </div>
-          <button
-            className="btn primary"
-            disabled={!form.name || !form.source_url || create.isPending}
-            onClick={() =>
-              create.mutate(form, { onSuccess: () => setForm({ ...form, name: "", source_url: "" }) })
-            }
-          >
-            {t("common.create")}
-          </button>
-        </div>
-      </Card>
+      {rid !== null && <CameraWizard rid={rid} exitGroups={exitGroups?.items ?? []} />}
     </>
   );
 }

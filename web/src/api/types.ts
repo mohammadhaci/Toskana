@@ -85,6 +85,45 @@ export interface CameraCreate {
 
 export type CameraUpdate = Partial<CameraCreate>;
 
+/** One vendor entry of the wizard dropdown (GET /camera-presets). */
+export interface CameraPreset {
+  key: string;
+  label: string;
+  default_port: number;
+  needs_channel: boolean;
+  /** {user}/{password}/{ip}/{port}/{channel} template; null = manual URL. */
+  url_template: string | null;
+}
+
+/** Body of POST .../cameras/test-source: raw source OR vendor-preset fields.
+ * Preset fields let the server build the URL so the browser never has to
+ * assemble (or encode) the password itself. */
+export interface CameraTestSourceRequest {
+  source_type?: SourceType;
+  source_url?: string;
+  preset_key?: string;
+  ip?: string;
+  username?: string;
+  password?: string;
+  port?: number | null;
+  channel?: number;
+}
+
+/** Probe outcome — always HTTP 200; a failed probe is `ok: false`. */
+export interface CameraTestResult {
+  ok: boolean;
+  source_type: string;
+  /** Probed URL with the password masked (safe to display). */
+  source_url_masked: string | null;
+  /** On success: the full URL (server-built credentials) to store on save. */
+  source_url: string | null;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  snapshot_b64: string | null;
+  error: string | null;
+}
+
 export interface CameraStatus {
   camera_id: number;
   name: string | null;

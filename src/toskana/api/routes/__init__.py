@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from toskana.api.routes import (
     analysis,
+    camera_wizard,
     cameras,
     categories,
     events,
@@ -25,6 +26,7 @@ from toskana.api.routes import (
 api_router = APIRouter()
 api_router.include_router(restaurants.router)
 api_router.include_router(cameras.router)
+api_router.include_router(camera_wizard.router)
 api_router.include_router(exit_groups.router)
 api_router.include_router(lines.router)
 api_router.include_router(categories.router)

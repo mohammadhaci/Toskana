@@ -53,6 +53,15 @@ export function useCameras(rid: number | null) {
   });
 }
 
+/** Static vendor preset list for the camera wizard. */
+export function useCameraPresets() {
+  return useQuery({
+    queryKey: ["camera-presets"],
+    queryFn: api.listCameraPresets,
+    staleTime: Infinity,
+  });
+}
+
 export function useCameraStatus(cameraId: number, intervalMs = 5000) {
   return useQuery({
     queryKey: ["camera-status", cameraId],
