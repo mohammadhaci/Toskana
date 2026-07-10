@@ -78,9 +78,7 @@ def test_export_registers_model_and_mappings(
     assert json.loads(model.metrics_json)["map50"] == 0.42
     assert model.path == str(dest / "best.pt")
 
-    mappings = session.scalars(
-        select(ClassMapping).where(ClassMapping.model_id == model.id)
-    ).all()
+    mappings = session.scalars(select(ClassMapping).where(ClassMapping.model_id == model.id)).all()
     # class names equal seeded category keys -> auto-resolved targets
     by_class = {m.model_class_name: m for m in mappings}
     assert set(by_class) == {"drink", "main", "dessert"}
@@ -121,9 +119,7 @@ def test_export_explicit_and_unresolvable_mappings(
     out = capsys.readouterr().out
     assert "mystery" in out  # reported for the admin to complete in the dashboard
     model = session.scalar(select(ModelRegistry).where(ModelRegistry.name == "smoke"))
-    mappings = session.scalars(
-        select(ClassMapping).where(ClassMapping.model_id == model.id)
-    ).all()
+    mappings = session.scalars(select(ClassMapping).where(ClassMapping.model_id == model.id)).all()
     assert len(mappings) == 1  # only the explicitly mapped class gets a skeleton row
     assert mappings[0].model_class_name == "cup"
     drink = session.scalar(select(Category).where(Category.key == "drink"))

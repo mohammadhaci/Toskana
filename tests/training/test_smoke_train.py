@@ -23,8 +23,16 @@ from tests.tools.scenarios import ObjectSpec, ScenarioSpec, Waypoint
 from toskana.db.base import make_engine, make_session_factory
 from toskana.db.models import ClassMapping, ModelRegistry
 from toskana.db.seed import seed
-from training import autolabel, build_dataset, evaluate, export_model, extract_frames
-from training import ingest_local, train, validate_labels
+from training import (
+    autolabel,
+    build_dataset,
+    evaluate,
+    export_model,
+    extract_frames,
+    ingest_local,
+    train,
+    validate_labels,
+)
 
 pytestmark = pytest.mark.slow
 

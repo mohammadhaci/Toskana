@@ -138,9 +138,7 @@ def test_extract_frames_per_video_subdirs(frames_dir: Path) -> None:
     }
 
 
-def test_phash_dedup_drops_near_duplicates(
-    clips, tmp_path_factory: pytest.TempPathFactory
-) -> None:
+def test_phash_dedup_drops_near_duplicates(clips, tmp_path_factory: pytest.TempPathFactory) -> None:
     """The loitering clip wiggles +-8 px for ~2 s -> near-identical samples."""
     raw = tmp_path_factory.mktemp("loiter_raw")
     video = str(clips["loiter_on_line"].video_paths["cam"])
@@ -203,9 +201,7 @@ def test_autolabel_boxes_match_ground_truth(clips, frames_dir: Path, labels_dir:
     assert checked >= 10
 
 
-def test_autolabel_review_queue_collects_low_confidence(
-    frames_dir: Path, tmp_path: Path
-) -> None:
+def test_autolabel_review_queue_collects_low_confidence(frames_dir: Path, tmp_path: Path) -> None:
     out = tmp_path / "labels_review"
     argv = ["--frames", str(frames_dir), "--out", str(out), "--backend", "synthetic"]
     assert autolabel.main([*argv, "--review-conf", "1.0"]) == 0
