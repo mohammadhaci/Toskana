@@ -6,11 +6,12 @@ day). Afterwards every bus ``crossing`` is forwarded as ``{type:
 "crossing", event: {...}}`` and every ``gap`` as ``{type: "gap", gap:
 {...}}``.
 
-Design note for M8 (cross-camera dedup): the DedupEngine will subscribe to
-the bus between pipeline and writer and, when it *demotes* an optimistically
-canonical event, publish a correction that this module forwards as a third
-message type (``{type: "dedup_correction", event_id, is_canonical: false}``)
-so live counters can adjust without a reload.
+M8 (cross-camera dedup): when the DedupEngine demotes an optimistically
+canonical event it publishes on the ``dedup_correction`` bus topic, which
+this module forwards as a third message type — ``{type: "correction",
+event_id, dedup_group_id, is_canonical: false, category_id, menu_item_id,
+direction, camera_id, ts}`` — so live counters can decrement the affected
+category/direction without a reload.
 
 Bus callbacks fire on pipeline threads; they are marshalled into the event
 loop with ``call_soon_threadsafe`` and fanned out to one ``asyncio.Queue``
@@ -30,7 +31,7 @@ from sqlalchemy import select
 
 from toskana.api.timeutils import local_day_bounds, local_today
 from toskana.db.models import Category, Event, Restaurant
-from toskana.events.bus import TOPIC_CROSSING, TOPIC_GAP, EventBus
+from toskana.events.bus import TOPIC_CORRECTION, TOPIC_CROSSING, TOPIC_GAP, EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,19 @@ _CROSSING_KEYS = (
 
 _GAP_KEYS = ("restaurant_id", "camera_id", "from_ts", "to_ts", "reason")
 
+#: dedup_correction payload keys forwarded to WS clients.
+_CORRECTION_KEYS = (
+    "event_id",
+    "dedup_group_id",
+    "is_canonical",
+    "restaurant_id",
+    "camera_id",
+    "category_id",
+    "menu_item_id",
+    "direction",
+    "ts",
+)
+
 
 class LiveBroadcaster:
     """Fans bus events out to all connected ``/ws/live`` clients."""
@@ -77,6 +91,7 @@ class LiveBroadcaster:
         self._loop = loop
         self._unsubscribes.append(self._bus.subscribe(TOPIC_CROSSING, self._on_crossing))
         self._unsubscribes.append(self._bus.subscribe(TOPIC_GAP, self._on_gap))
+        self._unsubscribes.append(self._bus.subscribe(TOPIC_CORRECTION, self._on_correction))
 
     def stop(self) -> None:
         for unsubscribe in self._unsubscribes:
@@ -110,6 +125,11 @@ class LiveBroadcaster:
     def _on_gap(self, payload: dict[str, Any]) -> None:
         gap = {key: payload[key] for key in _GAP_KEYS if key in payload}
         self._dispatch({"type": "gap", "gap": gap})
+
+    def _on_correction(self, payload: dict[str, Any]) -> None:
+        """A dedup demotion: live counters must decrement this event."""
+        correction = {key: payload[key] for key in _CORRECTION_KEYS if key in payload}
+        self._dispatch({"type": "correction", **correction})
 
     def _dispatch(self, message: dict[str, Any]) -> None:
         loop = self._loop

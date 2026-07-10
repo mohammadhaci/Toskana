@@ -14,9 +14,10 @@
   at ``/`` when present.
 
 Event flow: ``CameraPipeline -> bus['crossing'] -> {EventWriter,
-LiveBroadcaster}``. M8's DedupEngine will subscribe to the same topic
-between pipeline and writer (events are written canonical optimistically
-and demoted by a later update + WS correction), so nothing here changes.
+DedupEngine, LiveBroadcaster}``. The M8 DedupEngine (built only when the
+active restaurant has an exit group with >= 2 cameras) subscribes *after*
+the writer: events are written canonical optimistically, then demoted via a
+``demote`` update the writer applies + a WS ``correction`` broadcast.
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from toskana.api.ws import LiveBroadcaster
 from toskana.config import AppConfig
 from toskana.events.bus import EventBus
 from toskana.events.writer import EventWriter, make_writer_session_factory
+from toskana.vision.dedup import build_dedup_engine
 from toskana.vision.manager import PipelineManager
 
 logger = logging.getLogger(__name__)
@@ -73,13 +75,20 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         manager = PipelineManager(config, bus=bus, session_factory=session_factory)
         broadcaster = LiveBroadcaster(bus)
 
+        dedup = await asyncio.to_thread(
+            build_dedup_engine, session_factory, config.active_restaurant_slug, bus=bus
+        )
+
         app.state.session_factory = session_factory
         app.state.bus = bus
         app.state.writer = writer
         app.state.manager = manager
         app.state.broadcaster = broadcaster
+        app.state.dedup = dedup
 
         writer.start()
+        if dedup is not None:
+            dedup.start()  # after writer.start(): inserts queue before demotions
         broadcaster.start(asyncio.get_running_loop())
         if start_pipelines:
             started = await asyncio.to_thread(manager.start_all)
@@ -88,6 +97,8 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
             yield
         finally:
             await asyncio.to_thread(manager.stop_all)
+            if dedup is not None:
+                dedup.stop()
             broadcaster.stop()
             await asyncio.to_thread(writer.stop)
 

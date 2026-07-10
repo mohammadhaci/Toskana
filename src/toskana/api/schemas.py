@@ -488,6 +488,10 @@ class SystemHealth(APIModel):
     pipelines: list[CameraStatus]
     writer_written_events: int
     writer_written_gaps: int
+    #: M8 cross-camera dedup (active only with a >=2-camera exit group).
+    dedup_active: bool = False
+    dedup_matches: int = 0
+    dedup_demotions: int = 0
 
 
 class SystemInfo(APIModel):

@@ -24,6 +24,8 @@ def health(request: Request, session: SessionDep, manager: ManagerDep) -> schema
     except Exception:  # noqa: BLE001 - any DB failure means degraded
         db_ok = False
     writer = request.app.state.writer
+    dedup = getattr(request.app.state, "dedup", None)
+    dedup_stats = dedup.stats if dedup is not None else None
     pipelines = [schemas.CameraStatus(**status) for status in manager.status()]
     return schemas.SystemHealth(
         status="ok" if db_ok else "degraded",
@@ -31,6 +33,9 @@ def health(request: Request, session: SessionDep, manager: ManagerDep) -> schema
         pipelines=pipelines,
         writer_written_events=writer.written_events if writer is not None else 0,
         writer_written_gaps=writer.written_gaps if writer is not None else 0,
+        dedup_active=dedup is not None,
+        dedup_matches=dedup_stats.matches if dedup_stats is not None else 0,
+        dedup_demotions=dedup_stats.demotions if dedup_stats is not None else 0,
     )
 
 

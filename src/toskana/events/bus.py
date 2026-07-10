@@ -19,6 +19,12 @@ Subscriber = Callable[[Any], None]
 
 TOPIC_CROSSING = "crossing"
 TOPIC_GAP = "gap"
+#: DedupEngine -> EventWriter: apply an ``is_canonical``/``dedup_group_id``
+#: UPDATE to an already-inserted event (single-writer discipline).
+TOPIC_DEMOTE = "demote"
+#: DedupEngine -> /ws/live: an optimistically-canonical event was demoted;
+#: forwarded to clients as ``{type: "correction", ...}``.
+TOPIC_CORRECTION = "dedup_correction"
 
 
 class EventBus:

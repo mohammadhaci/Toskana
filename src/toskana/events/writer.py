@@ -2,11 +2,18 @@
 
 :class:`EventWriter` owns the only thread that writes to the ``events`` and
 ``data_gaps`` tables. Payloads arrive either through an
-:class:`~toskana.events.bus.EventBus` subscription (topics ``crossing`` and
-``gap``) or by direct ``enqueue_*`` calls; they are buffered in a queue and
-flushed in batches (every ``flush_interval_s`` or ``batch_size`` items,
-whichever comes first). ``stop()`` drains the queue and performs a final
-flush, so no accepted payload is ever lost on graceful shutdown.
+:class:`~toskana.events.bus.EventBus` subscription (topics ``crossing``,
+``gap`` and ``demote``) or by direct ``enqueue_*`` calls; they are buffered
+in a queue and flushed in batches (every ``flush_interval_s`` or
+``batch_size`` items, whichever comes first). ``stop()`` drains the queue
+and performs a final flush, so no accepted payload is ever lost on graceful
+shutdown.
+
+``demote`` payloads (from the M8 DedupEngine) are ``UPDATE``s of
+``dedup_group_id``/``is_canonical`` on already-inserted events, applied on
+the same single writer thread in queue order — the optimistic insert always
+precedes its demotion because the writer subscribes to ``crossing`` before
+the engine does (an in-batch update autoflushes the pending insert first).
 """
 
 from __future__ import annotations
@@ -17,7 +24,7 @@ import threading
 from collections.abc import Mapping
 from typing import Any
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, update
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 from ulid import ULID
@@ -25,7 +32,7 @@ from ulid import ULID
 from toskana.config import sqlite_url
 from toskana.db.base import _set_sqlite_pragmas
 from toskana.db.models import DataGap, Event
-from toskana.events.bus import TOPIC_CROSSING, TOPIC_GAP, EventBus
+from toskana.events.bus import TOPIC_CROSSING, TOPIC_DEMOTE, TOPIC_GAP, EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +61,9 @@ _EVENT_FIELDS = frozenset(
 )
 
 _GAP_FIELDS = frozenset({"restaurant_id", "camera_id", "from_ts", "to_ts", "reason"})
+
+#: ``events`` columns a demote payload may update (keyed by ``event_id``).
+_DEMOTE_FIELDS = frozenset({"dedup_group_id", "is_canonical"})
 
 _STOP = object()
 
@@ -99,6 +109,7 @@ class EventWriter:
         self._unsubscribes: list[Any] = []
         self._written_events = 0
         self._written_gaps = 0
+        self._applied_demotes = 0
         self._counts_lock = threading.Lock()
 
     # -- lifecycle -----------------------------------------------------------
@@ -111,6 +122,7 @@ class EventWriter:
         if self._bus is not None:
             self._unsubscribes.append(self._bus.subscribe(TOPIC_CROSSING, self.enqueue_event))
             self._unsubscribes.append(self._bus.subscribe(TOPIC_GAP, self.enqueue_gap))
+            self._unsubscribes.append(self._bus.subscribe(TOPIC_DEMOTE, self.enqueue_demote))
 
     def stop(self) -> None:
         """Graceful stop: unsubscribe, drain the queue, final flush. Idempotent."""
@@ -140,6 +152,10 @@ class EventWriter:
         """Queue one data-gap payload (``data_gaps`` columns)."""
         self._queue.put(("gap", dict(payload)))
 
+    def enqueue_demote(self, payload: Mapping[str, Any]) -> None:
+        """Queue one dedup update (``event_id`` + is_canonical/dedup_group_id)."""
+        self._queue.put(("demote", dict(payload)))
+
     # -- observability -------------------------------------------------------
 
     @property
@@ -151,6 +167,11 @@ class EventWriter:
     def written_gaps(self) -> int:
         with self._counts_lock:
             return self._written_gaps
+
+    @property
+    def applied_demotes(self) -> int:
+        with self._counts_lock:
+            return self._applied_demotes
 
     # -- writer thread -------------------------------------------------------
 
@@ -185,11 +206,26 @@ class EventWriter:
         batch, pending[:] = list(pending), []
         try:
             with self._session_factory() as session:
-                n_events = n_gaps = 0
+                n_events = n_gaps = n_demotes = 0
                 for kind, payload in batch:
                     if kind == "event":
                         session.add(self._build_event(payload))
                         n_events += 1
+                    elif kind == "demote":
+                        # Autoflush pushes any pending same-batch insert first,
+                        # so in-queue order (insert before update) is preserved.
+                        session.execute(
+                            update(Event)
+                            .where(Event.id == payload["event_id"])
+                            .values(
+                                **{
+                                    key: value
+                                    for key, value in payload.items()
+                                    if key in _DEMOTE_FIELDS
+                                }
+                            )
+                        )
+                        n_demotes += 1
                     else:
                         session.add(self._build_gap(payload))
                         n_gaps += 1
@@ -197,6 +233,7 @@ class EventWriter:
             with self._counts_lock:
                 self._written_events += n_events
                 self._written_gaps += n_gaps
+                self._applied_demotes += n_demotes
         except Exception:
             logger.exception("event writer flush failed; dropped %d payload(s)", len(batch))
 
