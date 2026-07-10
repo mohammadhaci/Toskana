@@ -68,7 +68,8 @@
     "next": "Weiter",
     "all": "Alle",
     "connected": "Verbunden",
-    "disconnected": "Getrennt"
+    "disconnected": "Getrennt",
+    "item": "Artikel"
   },
   "live": {
     "title": "Live",
@@ -114,7 +115,8 @@
     "emptyHint": "Zeitraum erweitern oder prüfen, ob die Kameras laufen.",
     "totalOut": "Gesamt raus",
     "totalIn": "Gesamt retour",
-    "totalNet": "Netto"
+    "totalNet": "Netto",
+    "byItemTitle": "Nach Artikel"
   },
   "events": {
     "title": "Ereignisse",
@@ -135,7 +137,8 @@
       "class": "Klasse",
       "line": "Linie",
       "canonical": "Kanonisch",
-      "suppressed": "Duplikat"
+      "suppressed": "Duplikat",
+      "item": "Artikel / Kategorie"
     },
     "suppressedBadge": "unterdrückt",
     "makeCanonical": "Als kanonisch markieren",

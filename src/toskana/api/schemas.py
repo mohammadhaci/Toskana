@@ -392,6 +392,7 @@ class EventRead(ORMModel):
     track_id: int
     category_id: int | None
     menu_item_id: int | None
+    menu_item_name: str | None = None
     raw_class_name: str
     confidence: float
     direction: Direction
@@ -426,7 +427,7 @@ class TimeseriesRow(APIModel):
 
 class TimeseriesResponse(APIModel):
     bucket: Literal["hour", "day"]
-    group_by: Literal["category", "camera", "direction"] | None
+    group_by: Literal["category", "camera", "direction", "menu_item"] | None
     timezone: str
     from_ts: int | None
     to_ts: int | None
@@ -446,12 +447,27 @@ class CategoryCounter(APIModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class MenuItemCounter(APIModel):
+    """Today's totals for one named menu item (Phase 2)."""
+
+    menu_item_id: int
+    name: str
+    category_id: int | None
+    out: int
+    in_: int = Field(serialization_alias="in")
+    net: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class StatsSummary(APIModel):
     date: str  # local date (restaurant timezone)
     timezone: str
     from_ts: int
     to_ts: int
     categories: list[CategoryCounter]
+    #: Only menu items with at least one canonical event today appear here.
+    menu_items: list[MenuItemCounter]
     total_out: int
     total_in: int
     total_net: int

@@ -337,6 +337,11 @@ class Event(Base):
     menu_item: Mapped[MenuItem] = relationship()
     session: Mapped[ServiceSession] = relationship()
 
+    @property
+    def menu_item_name(self) -> str | None:
+        """Denormalized item name for API serialization (Phase 2)."""
+        return self.menu_item.name if self.menu_item is not None else None
+
     __table_args__ = (
         CheckConstraint("direction IN ('out', 'in')", name="ck_events_direction"),
         Index("ix_events_restaurant_ts", "restaurant_id", "ts"),

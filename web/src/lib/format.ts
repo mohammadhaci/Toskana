@@ -10,6 +10,19 @@ export function categoryLabel(
   return name ?? record.name_en ?? record.name_de ?? record.key ?? fallback;
 }
 
+/** Phase-2 display name for an event-ish record: the menu item's name when
+ * present, else the (localized) category name, else the fallback. */
+export function itemLabel(
+  record: { menu_item_name?: string | null },
+  category: (Pick<Category | LiveCounter, "name_de" | "name_en"> & { key?: string | null }) | null,
+  lang: string,
+  fallback = "?",
+): string {
+  if (record.menu_item_name) return record.menu_item_name;
+  if (category) return categoryLabel(category, lang, fallback);
+  return fallback;
+}
+
 export function formatTime(ms: number, lang: string): string {
   return new Date(ms).toLocaleTimeString(lang.startsWith("de") ? "de-AT" : "en-GB", {
     hour: "2-digit",

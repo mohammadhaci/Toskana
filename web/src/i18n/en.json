@@ -68,7 +68,8 @@
     "next": "Next",
     "all": "All",
     "connected": "Connected",
-    "disconnected": "Disconnected"
+    "disconnected": "Disconnected",
+    "item": "Item"
   },
   "live": {
     "title": "Live",
@@ -114,7 +115,8 @@
     "emptyHint": "Widen the range or check that the cameras are running.",
     "totalOut": "Total out",
     "totalIn": "Total returned",
-    "totalNet": "Net"
+    "totalNet": "Net",
+    "byItemTitle": "By menu item"
   },
   "events": {
     "title": "Events",
@@ -135,7 +137,8 @@
       "class": "Class",
       "line": "Line",
       "canonical": "Canonical",
-      "suppressed": "Duplicate"
+      "suppressed": "Duplicate",
+      "item": "Item / category"
     },
     "suppressedBadge": "suppressed",
     "makeCanonical": "Mark as canonical",

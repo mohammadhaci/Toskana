@@ -30,7 +30,7 @@ from toskana.events.writer import new_event_id
 from toskana.vision.capture import VideoSource
 from toskana.vision.detector import TrackingBackend
 from toskana.vision.line_crossing import CrossingEvent, LineCrossingCounter, LineSpec
-from toskana.vision.mapping import ClassMappingResolver, MappingRule
+from toskana.vision.mapping import ClassMappingResolver, MappingRule, MenuItemInfo
 from toskana.vision.snapshots import SnapshotSaver
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,9 @@ class PipelineSpec:
     loop: bool = False
     lines: tuple[LineSpec, ...] = ()
     mapping_rules: tuple[MappingRule, ...] = ()
+    #: Menu-item lookup (Phase 2): lets the resolver derive an item mapping's
+    #: category (fallback chain) and attach the display name to payloads.
+    menu_items: tuple[MenuItemInfo, ...] = ()
     snapshots_dir: str | None = None
     #: Performance preset knobs (see :mod:`toskana.vision.presets`):
     #: process every ``frame_skip``-th frame (1 = every frame) and run the
@@ -161,7 +164,7 @@ class CameraPipeline:
         """Process the source to exhaustion (or until :meth:`stop`)."""
         spec = self.spec
         backend = self._backend if self._backend is not None else make_tracking_backend(spec)
-        resolver = ClassMappingResolver(spec.mapping_rules)
+        resolver = ClassMappingResolver(spec.mapping_rules, menu_items=spec.menu_items)
         result = self.result = PipelineResult()
 
         with VideoSource(
@@ -251,6 +254,7 @@ class CameraPipeline:
             # Extra context for live consumers (ignored by the DB writer):
             "canonical_direction": crossing.direction,
             "class_name": crossing.class_name,
+            "menu_item_name": resolution.menu_item_name,
         }
         result.add(crossing, payload)
         if self.bus is not None:

@@ -163,11 +163,13 @@ export default function LivePage() {
                   <div key={event.id} className="ticker-row">
                     <ColorChip color={counter?.color_hex} />
                     <span>
-                      {event.category_id === null
-                        ? (event.raw_class_name || t("common.unmapped"))
-                        : counter
-                          ? categoryLabel(counter, i18n.language)
-                          : event.raw_class_name}
+                      {event.menu_item_name
+                        ? event.menu_item_name
+                        : event.category_id === null
+                          ? (event.raw_class_name || t("common.unmapped"))
+                          : counter
+                            ? categoryLabel(counter, i18n.language)
+                            : event.raw_class_name}
                     </span>
                     <Badge tone={event.direction === "out" ? "accent" : "warn"}>
                       {event.direction === "out" ? t("common.out") : t("common.in")}

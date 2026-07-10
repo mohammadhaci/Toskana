@@ -92,17 +92,17 @@ def _parse_line_arg(value: str) -> tuple[float, float, float, float]:
 
 def _simulate_db_context(
     db_path: str, config: AppConfig, video: Path, backend: str
-) -> tuple[int, int, list[Any]]:
+) -> tuple[int, int, list[Any], list[Any]]:
     """Prepare a DB for persistence: schema + simulate restaurant/camera rows.
 
-    Returns ``(restaurant_id, camera_id, mapping_rules)``.
+    Returns ``(restaurant_id, camera_id, mapping_rules, menu_item_infos)``.
     """
     from sqlalchemy import select
 
     from toskana.db.base import Base, make_engine, make_session_factory
-    from toskana.db.models import Camera, Category, ClassMapping, Restaurant
+    from toskana.db.models import Camera, Category, ClassMapping, MenuItem, Restaurant
     from toskana.vision.backends.synthetic import SYNTHETIC_CLASS_NAMES
-    from toskana.vision.mapping import MappingRule
+    from toskana.vision.mapping import MappingRule, MenuItemInfo
 
     engine = make_engine(db_path)
     Base.metadata.create_all(engine)  # no-op on an initialized database
@@ -130,8 +130,34 @@ def _simulate_db_context(
             session.add(camera)
             session.flush()
         if backend == "synthetic":
-            # Map the synthetic class names onto same-key categories, if present.
+            # Map the synthetic class names onto menu items (a class_mappings
+            # row for the class name that targets a menu item — Phase 2) or,
+            # failing that, onto same-key categories, if present.
+            item_mappings = {
+                row.model_class_name: row
+                for row in session.scalars(
+                    select(ClassMapping)
+                    .where(
+                        ClassMapping.restaurant_id == restaurant.id,
+                        ClassMapping.menu_item_id.is_not(None),
+                        ClassMapping.model_class_name.in_(SYNTHETIC_CLASS_NAMES),
+                    )
+                    .order_by(ClassMapping.id)
+                )
+            }
             for class_id, class_name in enumerate(SYNTHETIC_CLASS_NAMES):
+                mapping = item_mappings.get(class_name)
+                if mapping is not None:
+                    rules.append(
+                        MappingRule(
+                            model_class_id=class_id,
+                            model_class_name=class_name,
+                            category_id=mapping.category_id,
+                            menu_item_id=mapping.menu_item_id,
+                            min_confidence=0.0,
+                        )
+                    )
+                    continue
                 category = session.scalar(
                     select(Category).where(
                         Category.restaurant_id == restaurant.id, Category.key == class_name
@@ -152,10 +178,18 @@ def _simulate_db_context(
                     select(ClassMapping).where(ClassMapping.restaurant_id == restaurant.id)
                 ).all()
             )
+        menu_items = [
+            MenuItemInfo.from_row(row)
+            for row in session.scalars(
+                select(MenuItem)
+                .where(MenuItem.restaurant_id == restaurant.id)
+                .order_by(MenuItem.id)
+            )
+        ]
         session.commit()
         restaurant_id, camera_id = restaurant.id, camera.id
     engine.dispose()
-    return restaurant_id, camera_id, rules
+    return restaurant_id, camera_id, rules, menu_items
 
 
 def cmd_simulate(config: AppConfig, args: argparse.Namespace) -> int:
@@ -174,15 +208,17 @@ def cmd_simulate(config: AppConfig, args: argparse.Namespace) -> int:
     x1, y1, x2, y2 = args.line
     restaurant_id, camera_id = 1, 1
     mapping_rules: tuple[Any, ...] = ()
+    menu_items: tuple[Any, ...] = ()
     snapshots_dir: str | None = None
     writer: EventWriter | None = None
     bus = EventBus()
 
     if args.db:
-        restaurant_id, camera_id, raw_rules = _simulate_db_context(
+        restaurant_id, camera_id, raw_rules, raw_items = _simulate_db_context(
             args.db, config, video, args.backend
         )
         mapping_rules = tuple(MappingRule.from_row(rule) for rule in raw_rules)
+        menu_items = tuple(raw_items)
         snapshots_dir = config.snapshots_dir
         writer = EventWriter(make_writer_session_factory(args.db), bus=bus)
         writer.start()
@@ -198,6 +234,7 @@ def cmd_simulate(config: AppConfig, args: argparse.Namespace) -> int:
         paced=False,
         lines=(LineSpec(x1=x1, y1=y1, x2=x2, y2=y2, line_id=None, name="simulate"),),
         mapping_rules=mapping_rules,
+        menu_items=menu_items,
         snapshots_dir=snapshots_dir,
     )
     try:

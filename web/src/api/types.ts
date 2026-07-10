@@ -222,6 +222,7 @@ export interface EventRecord {
   track_id: number;
   category_id: number | null;
   menu_item_id: number | null;
+  menu_item_name: string | null;
   raw_class_name: string;
   confidence: number;
   direction: Direction;
@@ -237,7 +238,7 @@ export interface EventRecord {
 // -- stats ------------------------------------------------------------------------
 
 export type Bucket = "hour" | "day";
-export type GroupBy = "category" | "camera" | "direction";
+export type GroupBy = "category" | "camera" | "direction" | "menu_item";
 
 export interface TimeseriesRow {
   bucket_ts: number;
@@ -268,12 +269,23 @@ export interface CategoryCounter {
   net: number;
 }
 
+export interface MenuItemCounter {
+  menu_item_id: number;
+  name: string;
+  category_id: number | null;
+  out: number;
+  in: number;
+  net: number;
+}
+
 export interface StatsSummary {
   date: string;
   timezone: string;
   from_ts: number;
   to_ts: number;
   categories: CategoryCounter[];
+  /** Phase 2: only menu items with canonical events today. */
+  menu_items: MenuItemCounter[];
   total_out: number;
   total_in: number;
   total_net: number;
@@ -352,6 +364,7 @@ export interface LiveCrossingEvent {
   track_id: number;
   category_id: number | null;
   menu_item_id: number | null;
+  menu_item_name?: string | null;
   raw_class_name: string;
   class_name?: string;
   confidence: number;

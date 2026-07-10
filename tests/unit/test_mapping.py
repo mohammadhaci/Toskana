@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from toskana.vision.detector import Detection
-from toskana.vision.mapping import ClassMappingResolver, MappingRule, Resolution
+from toskana.vision.mapping import ClassMappingResolver, MappingRule, MenuItemInfo, Resolution
 
 RULES = [
     MappingRule(model_class_id=41, model_class_name="cup", category_id=1, min_confidence=0.35),
@@ -99,3 +99,77 @@ def test_resolve_detection_helper() -> None:
     resolution = ClassMappingResolver(RULES).resolve_detection(detection)
     assert resolution.status == "mapped"
     assert resolution.confidence == 0.7
+
+
+# -- Phase 2 fallback chain (critic requirement #10) ----------------------------
+
+ITEM_RULES = [
+    # Menu-item target only: the category must be derived from the item.
+    MappingRule(model_class_id=0, model_class_name="drink", menu_item_id=7, min_confidence=0.35),
+    # Category target only: Phase-1 behaviour, no item attribution.
+    MappingRule(model_class_id=1, model_class_name="main", category_id=3, min_confidence=0.35),
+]
+
+MENU_ITEMS = [
+    MenuItemInfo(menu_item_id=7, category_id=1, name="Aperol Spritz"),
+    MenuItemInfo(menu_item_id=8, category_id=3, name="Wiener Schnitzel"),
+]
+
+
+def test_menu_item_target_derives_category_and_name() -> None:
+    resolver = ClassMappingResolver(ITEM_RULES, menu_items=MENU_ITEMS)
+    resolution = resolver.resolve(0, "drink", 0.9)
+    assert resolution.status == "mapped"
+    assert resolution.menu_item_id == 7
+    assert resolution.menu_item_name == "Aperol Spritz"
+    assert resolution.category_id == 1  # derived via menu_items.category_id
+
+
+def test_menu_item_target_respects_min_confidence() -> None:
+    resolver = ClassMappingResolver(ITEM_RULES, menu_items=MENU_ITEMS)
+    resolution = resolver.resolve(0, "drink", 0.2)  # below 0.35
+    assert resolution.status == "ignored"
+    assert not resolution.is_countable
+    assert resolution.menu_item_id is None
+    assert resolution.category_id is None
+
+
+def test_category_fallback_when_no_item_mapping_exists() -> None:
+    resolver = ClassMappingResolver(ITEM_RULES, menu_items=MENU_ITEMS)
+    resolution = resolver.resolve(1, "main", 0.9)
+    assert resolution.status == "mapped"
+    assert resolution.category_id == 3  # category-only mapping stays Phase 1
+    assert resolution.menu_item_id is None
+    assert resolution.menu_item_name is None
+
+
+def test_explicit_category_on_item_rule_wins_over_derivation() -> None:
+    rule = MappingRule(model_class_id=2, model_class_name="dessert", category_id=99, menu_item_id=8)
+    resolver = ClassMappingResolver([rule], menu_items=MENU_ITEMS)
+    resolution = resolver.resolve(2, "dessert", 0.9)
+    assert resolution.category_id == 99  # not overridden by the item's category (3)
+    assert resolution.menu_item_id == 8
+    assert resolution.menu_item_name == "Wiener Schnitzel"
+
+
+def test_unknown_menu_item_id_keeps_category_none() -> None:
+    # Item referenced by the mapping is missing from the lookup: never crash,
+    # keep the item id on the event, leave the category NULL.
+    resolver = ClassMappingResolver(ITEM_RULES, menu_items=())
+    resolution = resolver.resolve(0, "drink", 0.9)
+    assert resolution.status == "mapped"
+    assert resolution.menu_item_id == 7
+    assert resolution.menu_item_name is None
+    assert resolution.category_id is None
+
+
+def test_menu_items_from_orm_like_rows() -> None:
+    # MenuItem ORM rows carry ``id`` (not ``menu_item_id``); from_row adapts.
+    row = SimpleNamespace(id=12, category_id=4, name="Tiramisu")
+    resolver = ClassMappingResolver(
+        [MappingRule(model_class_id=5, model_class_name="dessert", menu_item_id=12)],
+        menu_items=[row],
+    )
+    resolution = resolver.resolve(5, "dessert", 0.9)
+    assert resolution.category_id == 4
+    assert resolution.menu_item_name == "Tiramisu"

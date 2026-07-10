@@ -19,7 +19,7 @@ import {
   msToLocalInput,
   type EventFilters,
 } from "../lib/eventFilters";
-import { categoryLabel, formatDateTime } from "../lib/format";
+import { categoryLabel, formatDateTime, itemLabel } from "../lib/format";
 
 function SnapshotThumb({ rid, event }: { rid: number; event: EventRecord }) {
   const [failed, setFailed] = useState(false);
@@ -173,7 +173,7 @@ export default function EventsPage() {
                     <th>{t("events.table.snapshot")}</th>
                     <th>{t("common.time")}</th>
                     <th>{t("common.camera")}</th>
-                    <th>{t("common.category")}</th>
+                    <th>{t("events.table.item")}</th>
                     <th>{t("events.table.class")}</th>
                     <th>{t("common.direction")}</th>
                     <th className="num">{t("common.confidence")}</th>
@@ -194,7 +194,7 @@ export default function EventsPage() {
                         <td>
                           <span className="btn-row">
                             <ColorChip color={category?.color_hex} />
-                            {category ? categoryLabel(category, i18n.language) : t("common.unmapped")}
+                            {itemLabel(event, category, i18n.language, t("common.unmapped"))}
                           </span>
                         </td>
                         <td>{event.raw_class_name}</td>

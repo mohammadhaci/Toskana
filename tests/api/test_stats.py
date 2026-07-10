@@ -113,12 +113,12 @@ class TestGroupingAndNet:
         ids = api_env.ids
         rid = ids["rest_a"]
         with api_env.session() as session:
-            for offset, camera, category, direction, canonical in (
-                (0, "cam_a1", "cat_a_drink", "out", True),
-                (1_000, "cam_a1", "cat_a_drink", "out", True),
-                (2_000, "cam_a1", "cat_a_drink", "in", True),
-                (3_000, "cam_a2", "cat_a_main", "out", True),
-                (4_000, "cam_a1", "cat_a_drink", "out", False),  # suppressed duplicate
+            for offset, camera, category, menu_item, direction, canonical in (
+                (0, "cam_a1", "cat_a_drink", "menu_a", "out", True),
+                (1_000, "cam_a1", "cat_a_drink", "menu_a", "out", True),
+                (2_000, "cam_a1", "cat_a_drink", "menu_a", "in", True),
+                (3_000, "cam_a2", "cat_a_main", None, "out", True),
+                (4_000, "cam_a1", "cat_a_drink", "menu_a", "out", False),  # suppressed dup
             ):
                 add_event(
                     session,
@@ -127,6 +127,7 @@ class TestGroupingAndNet:
                     ts=self.HOUR + offset,
                     direction=direction,
                     category_id=ids[category],
+                    menu_item_id=ids[menu_item] if menu_item is not None else None,
                     is_canonical=canonical,
                 )
             # B's event in the same hour must never leak into A's stats.
@@ -165,6 +166,19 @@ class TestGroupingAndNet:
             str(api_env.ids["cam_a2"]): (1, 0),
         }
 
+    def test_group_by_menu_item(self, client: TestClient, api_env: ApiEnv) -> None:
+        """Phase 2: canonical-only per-item buckets; item-less events group
+        under null; the net calculation matches the category behaviour."""
+        self._seed(api_env)
+        body = _timeseries(client, api_env.ids["rest_a"], bucket="hour", group_by="menu_item")
+        assert body["group_by"] == "menu_item"
+        by_group = {row["group"]: row for row in body["rows"]}
+        item = by_group[str(api_env.ids["menu_a"])]
+        # 2 canonical out + 1 in (the suppressed duplicate is not counted).
+        assert (item["out"], item["in"], item["net"]) == (2, 1, 1)
+        no_item = by_group[None]  # the main-course event has no item mapping
+        assert (no_item["out"], no_item["in"], no_item["net"]) == (1, 0, 1)
+
     def test_group_by_direction(self, client: TestClient, api_env: ApiEnv) -> None:
         self._seed(api_env)
         body = _timeseries(client, api_env.ids["rest_a"], bucket="hour", group_by="direction")
@@ -200,6 +214,7 @@ class TestSummary:
                 ts=now_ms,
                 direction="out",
                 category_id=ids["cat_a_drink"],
+                menu_item_id=ids["menu_a"],
             )
             add_event(
                 session,
@@ -208,6 +223,7 @@ class TestSummary:
                 ts=now_ms + 1,
                 direction="out",
                 category_id=ids["cat_a_drink"],
+                menu_item_id=ids["menu_a"],
             )
             add_event(
                 session,
@@ -216,6 +232,7 @@ class TestSummary:
                 ts=now_ms + 2,
                 direction="in",
                 category_id=ids["cat_a_drink"],
+                menu_item_id=ids["menu_a"],
             )
             add_event(
                 session,
@@ -277,3 +294,15 @@ class TestSummary:
         assert body["total_out"] == 4
         assert body["total_in"] == 1
         assert body["total_net"] == 3
+
+        # Phase 2: only items with events today appear, net = out - in.
+        assert body["menu_items"] == [
+            {
+                "menu_item_id": ids["menu_a"],
+                "name": "Spritzer",
+                "category_id": ids["cat_a_drink"],
+                "out": 2,
+                "in": 1,
+                "net": 1,
+            }
+        ]

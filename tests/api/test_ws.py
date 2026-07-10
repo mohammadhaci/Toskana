@@ -26,7 +26,8 @@ def _crossing_payload(api_env: ApiEnv, event_id: str) -> dict:
         "line_id": api_env.ids["line_a1"],
         "track_id": 7,
         "category_id": api_env.ids["cat_a_drink"],
-        "menu_item_id": None,
+        "menu_item_id": api_env.ids["menu_a"],
+        "menu_item_name": "Spritzer",
         "raw_class_name": "cup",
         "confidence": 0.87,
         "direction": "out",
@@ -81,6 +82,8 @@ class TestWsLive:
             assert event["direction"] == "out"
             assert event["category_id"] == api_env.ids["cat_a_drink"]
             assert event["class_name"] == "cup"
+            assert event["menu_item_id"] == api_env.ids["menu_a"]
+            assert event["menu_item_name"] == "Spritzer"  # Phase 2: item name live
             assert "canonical_direction" not in event  # internal extras are dropped
 
             gap_payload = {

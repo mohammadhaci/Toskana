@@ -13,10 +13,11 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import Select, func, select
+from sqlalchemy.orm import selectinload
 
 from toskana.api import schemas
 from toskana.api.deps import ConfigDep, PageDep, SessionDep, restaurant_or_404
-from toskana.db.models import Camera, Category, Event
+from toskana.db.models import Camera, Category, Event, MenuItem
 
 router = APIRouter(tags=["events"])
 
@@ -33,6 +34,7 @@ CSV_COLUMNS = [
     "category_id",
     "category_key",
     "menu_item_id",
+    "menu_item_name",
     "raw_class_name",
     "confidence",
     "is_canonical",
@@ -48,6 +50,7 @@ def _filtered(
     to_ts: int | None,
     camera_id: int | None,
     category_id: int | None,
+    menu_item_id: int | None,
     direction: str | None,
     canonical_only: bool,
     q: str | None,
@@ -61,6 +64,8 @@ def _filtered(
         stmt = stmt.where(Event.camera_id == camera_id)
     if category_id is not None:
         stmt = stmt.where(Event.category_id == category_id)
+    if menu_item_id is not None:
+        stmt = stmt.where(Event.menu_item_id == menu_item_id)
     if direction is not None:
         stmt = stmt.where(Event.direction == direction)
     if canonical_only:
@@ -79,6 +84,7 @@ def list_events(
     to_ts: int | None = None,
     camera_id: int | None = None,
     category_id: int | None = None,
+    menu_item_id: int | None = None,
     direction: Literal["out", "in"] | None = None,
     canonical_only: bool = True,
     q: str | None = None,
@@ -90,13 +96,17 @@ def list_events(
         to_ts=to_ts,
         camera_id=camera_id,
         category_id=category_id,
+        menu_item_id=menu_item_id,
         direction=direction,
         canonical_only=canonical_only,
         q=q,
     )
     total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = session.scalars(
-        stmt.order_by(Event.ts.desc(), Event.id.desc()).limit(page.limit).offset(page.offset)
+        stmt.options(selectinload(Event.menu_item))  # menu_item_name without N+1
+        .order_by(Event.ts.desc(), Event.id.desc())
+        .limit(page.limit)
+        .offset(page.offset)
     ).all()
     return {"items": rows, "total": total, "limit": page.limit, "offset": page.offset}
 
@@ -109,6 +119,7 @@ def export_events_csv(
     to_ts: int | None = None,
     camera_id: int | None = None,
     category_id: int | None = None,
+    menu_item_id: int | None = None,
     direction: Literal["out", "in"] | None = None,
     canonical_only: bool = True,
     q: str | None = None,
@@ -120,6 +131,7 @@ def export_events_csv(
         to_ts=to_ts,
         camera_id=camera_id,
         category_id=category_id,
+        menu_item_id=menu_item_id,
         direction=direction,
         canonical_only=canonical_only,
         q=q,
@@ -135,6 +147,12 @@ def export_events_csv(
         row.id: row.key
         for row in session.execute(
             select(Category.id, Category.key).where(Category.restaurant_id == restaurant_id)
+        )
+    }
+    menu_item_names: dict[int | None, str] = {
+        row.id: row.name
+        for row in session.execute(
+            select(MenuItem.id, MenuItem.name).where(MenuItem.restaurant_id == restaurant_id)
         )
     }
 
@@ -165,6 +183,7 @@ def export_events_csv(
                         event.category_id if event.category_id is not None else "",
                         category_keys.get(event.category_id, ""),
                         event.menu_item_id if event.menu_item_id is not None else "",
+                        menu_item_names.get(event.menu_item_id, ""),
                         event.raw_class_name,
                         f"{event.confidence:.4f}",
                         int(event.is_canonical),

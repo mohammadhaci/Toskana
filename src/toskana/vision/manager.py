@@ -29,12 +29,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from toskana.config import AppConfig
-from toskana.db.models import Camera, Category, ClassMapping, Line, ModelRegistry, Restaurant
+from toskana.db.models import (
+    Camera,
+    Category,
+    ClassMapping,
+    Line,
+    MenuItem,
+    ModelRegistry,
+    Restaurant,
+)
 from toskana.events.bus import TOPIC_GAP, EventBus
 from toskana.vision.detector import TrackedDetection
 from toskana.vision.drift import DriftDetector
 from toskana.vision.line_crossing import LineSpec
-from toskana.vision.mapping import MappingRule
+from toskana.vision.mapping import MappingRule, MenuItemInfo
 from toskana.vision.overlay import encode_jpeg, render_live
 from toskana.vision.pipeline import CameraPipeline, PipelineSpec
 from toskana.vision.presets import MIN_HEALTHY_FPS, resolve_preset
@@ -399,6 +407,7 @@ class PipelineManager:
             loop=is_file and self._config.loop_file_sources,
             lines=lines,
             mapping_rules=rules,
+            menu_items=self._menu_item_infos(session, camera.restaurant_id),
             snapshots_dir=self._config.snapshots_dir,
             frame_skip=frame_skip,
             imgsz=preset.imgsz,
@@ -423,12 +432,50 @@ class PipelineManager:
         return active[0] if active else None
 
     @staticmethod
+    def _menu_item_infos(session: Session, restaurant_id: int) -> tuple[MenuItemInfo, ...]:
+        """Menu-item lookup for the resolver's item -> category fallback chain."""
+        rows = session.scalars(
+            select(MenuItem).where(MenuItem.restaurant_id == restaurant_id).order_by(MenuItem.id)
+        ).all()
+        return tuple(MenuItemInfo.from_row(row) for row in rows)
+
+    @staticmethod
     def _synthetic_rules(session: Session, restaurant_id: int) -> tuple[MappingRule, ...]:
-        """Map synthetic class names onto same-key categories (demo/CI mode)."""
+        """Map synthetic class names onto same-key categories (demo/CI mode).
+
+        A ``class_mappings`` row whose ``model_class_name`` equals a synthetic
+        class name and targets a *menu item* takes precedence, so the Phase-2
+        path (event carries menu_item_id + derived category_id) is provable
+        end-to-end without any trained model.
+        """
         from toskana.vision.backends.synthetic import SYNTHETIC_CLASS_NAMES
 
+        item_mappings: dict[str, ClassMapping] = {
+            row.model_class_name: row
+            for row in session.scalars(
+                select(ClassMapping)
+                .where(
+                    ClassMapping.restaurant_id == restaurant_id,
+                    ClassMapping.menu_item_id.is_not(None),
+                    ClassMapping.model_class_name.in_(SYNTHETIC_CLASS_NAMES),
+                )
+                .order_by(ClassMapping.id)
+            )
+        }
         rules: list[MappingRule] = []
         for class_id, class_name in enumerate(SYNTHETIC_CLASS_NAMES):
+            mapping = item_mappings.get(class_name)
+            if mapping is not None:
+                rules.append(
+                    MappingRule(
+                        model_class_id=class_id,
+                        model_class_name=class_name,
+                        category_id=mapping.category_id,
+                        menu_item_id=mapping.menu_item_id,
+                        min_confidence=0.0,
+                    )
+                )
+                continue
             category = session.scalar(
                 select(Category).where(
                     Category.restaurant_id == restaurant_id, Category.key == class_name

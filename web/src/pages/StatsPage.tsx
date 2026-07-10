@@ -16,7 +16,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { useActiveRestaurantId, useCameras, useCategories, useTimeseries } from "../api/hooks";
+import { useActiveRestaurantId, useCameras, useCategories, useMenuItems, useTimeseries } from "../api/hooks";
 import type { Bucket } from "../api/types";
 import { Card, ColorChip, EmptyState, Skeleton } from "../components/ui";
 import { localInputToMs, msToLocalInput } from "../lib/eventFilters";
@@ -56,8 +56,10 @@ export default function StatsPage() {
 
   const byCategory = useTimeseries(rid, { bucket, ...range, group_by: "category" });
   const byCamera = useTimeseries(rid, { bucket, ...range, group_by: "camera" });
+  const byItem = useTimeseries(rid, { bucket, ...range, group_by: "menu_item" });
   const { data: categories } = useCategories(rid);
   const { data: cameras } = useCameras(rid);
+  const { data: menuItems } = useMenuItems(rid);
 
   const categoryColor = (groupKey: string): string => {
     if (isUngrouped(groupKey)) return UNMAPPED_COLOR;
@@ -71,6 +73,13 @@ export default function StatsPage() {
   };
   const cameraName = (groupKey: string): string =>
     cameras?.items.find((c) => String(c.id) === groupKey)?.name ?? `#${groupKey}`;
+  const menuItemOf = (groupKey: string) =>
+    menuItems?.items.find((m) => String(m.id) === groupKey) ?? null;
+  const menuItemName = (groupKey: string): string => menuItemOf(groupKey)?.name ?? `#${groupKey}`;
+  const menuItemColor = (groupKey: string): string => {
+    const categoryId = menuItemOf(groupKey)?.category_id;
+    return categoryId === undefined ? UNMAPPED_COLOR : categoryColor(String(categoryId));
+  };
 
   const stacked = useMemo(
     () => toStackedSeries(byCategory.data?.rows ?? [], "out"),
@@ -78,6 +87,11 @@ export default function StatsPage() {
   );
   const cameraTotals = useMemo(() => totalsByGroup(byCamera.data?.rows ?? []), [byCamera.data]);
   const categoryTotals = useMemo(() => totalsByGroup(byCategory.data?.rows ?? []), [byCategory.data]);
+  // Phase 2: per-item totals; events without an item mapping stay out of it.
+  const itemTotals = useMemo(
+    () => totalsByGroup(byItem.data?.rows ?? []).filter((row) => !isUngrouped(row.group)),
+    [byItem.data],
+  );
   const totals = useMemo(() => grandTotals(byCategory.data?.rows ?? []), [byCategory.data]);
 
   const formatBucket = (ts: number): string => {
@@ -301,6 +315,40 @@ export default function StatsPage() {
               </table>
             </div>
           </Card>
+
+          {itemTotals.length > 0 && (
+            <Card title={t("stats.byItemTitle")}>
+              <div className="table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>{t("common.item")}</th>
+                      <th className="num">{t("common.out")}</th>
+                      <th className="num">{t("common.in")}</th>
+                      <th className="num">{t("common.net")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...itemTotals]
+                      .sort((a, b) => menuItemName(a.group).localeCompare(menuItemName(b.group)))
+                      .map((row) => (
+                        <tr key={row.group}>
+                          <td>
+                            <span className="btn-row">
+                              <ColorChip color={menuItemColor(row.group)} />
+                              {menuItemName(row.group)}
+                            </span>
+                          </td>
+                          <td className="num">{row.out}</td>
+                          <td className="num">{row.in}</td>
+                          <td className="num">{row.net}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
         </>
       )}
     </>

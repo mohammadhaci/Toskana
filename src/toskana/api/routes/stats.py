@@ -11,11 +11,11 @@ from sqlalchemy import select
 from toskana.api import schemas
 from toskana.api.deps import SessionDep, restaurant_or_404
 from toskana.api.timeutils import bucket_start, epoch_ms, local_day_bounds, local_today
-from toskana.db.models import Category, Event
+from toskana.db.models import Category, Event, MenuItem
 
 router = APIRouter(prefix="/restaurants/{restaurant_id}/stats", tags=["stats"])
 
-GroupBy = Literal["category", "camera", "direction"]
+GroupBy = Literal["category", "camera", "direction", "menu_item"]
 
 
 @router.get("/timeseries", response_model=schemas.TimeseriesResponse)
@@ -30,9 +30,9 @@ def timeseries(
     restaurant = restaurant_or_404(session, restaurant_id)
     tz_name = restaurant.timezone
 
-    stmt = select(Event.ts, Event.direction, Event.category_id, Event.camera_id).where(
-        Event.restaurant_id == restaurant_id, Event.is_canonical.is_(True)
-    )
+    stmt = select(
+        Event.ts, Event.direction, Event.category_id, Event.camera_id, Event.menu_item_id
+    ).where(Event.restaurant_id == restaurant_id, Event.is_canonical.is_(True))
     if from_ts is not None:
         stmt = stmt.where(Event.ts >= from_ts)
     if to_ts is not None:
@@ -40,7 +40,7 @@ def timeseries(
 
     # (bucket_start_datetime, group_key) -> [out, in]
     counters: dict[tuple[int, str, str | None], list[int]] = {}
-    for ts, direction, category_id, camera_id in session.execute(stmt):
+    for ts, direction, category_id, camera_id, menu_item_id in session.execute(stmt):
         start = bucket_start(ts, tz_name, bucket)
         group: str | None
         if group_by == "category":
@@ -49,6 +49,8 @@ def timeseries(
             group = str(camera_id)
         elif group_by == "direction":
             group = direction
+        elif group_by == "menu_item":
+            group = str(menu_item_id) if menu_item_id is not None else None
         else:
             group = None
         key = (epoch_ms(start), start.isoformat(), group)
@@ -87,15 +89,19 @@ def summary(restaurant_id: int, session: SessionDep) -> schemas.StatsSummary:
     day_from, day_to = local_day_bounds(tz_name, today)
 
     per_category: dict[int | None, list[int]] = {}
-    stmt = select(Event.category_id, Event.direction).where(
+    per_item: dict[int, list[int]] = {}
+    stmt = select(Event.category_id, Event.menu_item_id, Event.direction).where(
         Event.restaurant_id == restaurant_id,
         Event.is_canonical.is_(True),
         Event.ts >= day_from,
         Event.ts < day_to,
     )
-    for category_id, direction in session.execute(stmt):
+    for category_id, menu_item_id, direction in session.execute(stmt):
         pair = per_category.setdefault(category_id, [0, 0])
         pair[0 if direction == "out" else 1] += 1
+        if menu_item_id is not None:
+            item_pair = per_item.setdefault(menu_item_id, [0, 0])
+            item_pair[0 if direction == "out" else 1] += 1
 
     categories = session.scalars(
         select(Category)
@@ -132,6 +138,24 @@ def summary(restaurant_id: int, session: SessionDep) -> schemas.StatsSummary:
                 net=out - in_,
             )
         )
+    item_rows: list[schemas.MenuItemCounter] = []
+    if per_item:
+        items = session.scalars(
+            select(MenuItem).where(MenuItem.id.in_(per_item)).order_by(MenuItem.name, MenuItem.id)
+        ).all()
+        for item in items:
+            out, in_ = per_item[item.id]
+            item_rows.append(
+                schemas.MenuItemCounter(
+                    menu_item_id=item.id,
+                    name=item.name,
+                    category_id=item.category_id,
+                    out=out,
+                    in_=in_,
+                    net=out - in_,
+                )
+            )
+
     total_out = sum(row.out for row in rows)
     total_in = sum(row.in_ for row in rows)
     return schemas.StatsSummary(
@@ -140,6 +164,7 @@ def summary(restaurant_id: int, session: SessionDep) -> schemas.StatsSummary:
         from_ts=day_from,
         to_ts=day_to,
         categories=rows,
+        menu_items=item_rows,
         total_out=total_out,
         total_in=total_in,
         total_net=total_out - total_in,

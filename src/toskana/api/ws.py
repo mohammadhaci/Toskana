@@ -48,6 +48,7 @@ _CROSSING_KEYS = (
     "track_id",
     "category_id",
     "menu_item_id",
+    "menu_item_name",
     "raw_class_name",
     "class_name",
     "confidence",

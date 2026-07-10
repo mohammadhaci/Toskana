@@ -29,6 +29,7 @@ def seeded_events(api_env: ApiEnv) -> dict[str, str]:
                 ts=T0 + 1_000,
                 direction="out",
                 category_id=ids["cat_a_drink"],
+                menu_item_id=ids["menu_a"],  # Phase 2: named item + its category
                 raw_class_name="cup",
                 line_id=ids["line_a1"],
             ),
@@ -131,6 +132,23 @@ class TestListFilters:
         by_q = _list(client, rid, q="bo")  # substring of raw_class_name "bowl"
         assert [row["id"] for row in by_q["items"]] == [seeded_events["a_main_out"]]
 
+    def test_filter_by_menu_item(
+        self, client: TestClient, api_env: ApiEnv, seeded_events: dict[str, str]
+    ) -> None:
+        rid, ids = api_env.ids["rest_a"], api_env.ids
+        by_item = _list(client, rid, menu_item_id=ids["menu_a"])
+        assert [row["id"] for row in by_item["items"]] == [seeded_events["a_drink_out"]]
+        row = by_item["items"][0]
+        # Phase 2: the event carries the item AND its category (fallback chain).
+        assert row["menu_item_id"] == ids["menu_a"]
+        assert row["menu_item_name"] == "Spritzer"
+        assert row["category_id"] == ids["cat_a_drink"]
+        # Events without an item mapping expose menu_item_name as null.
+        others = _list(client, rid, category_id=ids["cat_a_main"])
+        assert others["items"][0]["menu_item_id"] is None
+        assert others["items"][0]["menu_item_name"] is None
+        assert _list(client, rid, menu_item_id=999_999)["total"] == 0
+
     def test_pagination_newest_first(
         self, client: TestClient, api_env: ApiEnv, seeded_events: dict[str, str]
     ) -> None:
@@ -172,6 +190,8 @@ class TestDetailAndPatch:
         assert body["camera_id"] == api_env.ids["cam_a1"]
         assert body["ts"] == T0 + 1_000
         assert body["is_canonical"] is True
+        assert body["menu_item_id"] == api_env.ids["menu_a"]
+        assert body["menu_item_name"] == "Spritzer"
 
     def test_detail_cross_tenant_404(
         self, client: TestClient, api_env: ApiEnv, seeded_events: dict[str, str]
@@ -229,6 +249,7 @@ class TestCsvExport:
             "category_id",
             "category_key",
             "menu_item_id",
+            "menu_item_name",
             "raw_class_name",
             "confidence",
             "is_canonical",
@@ -252,7 +273,10 @@ class TestCsvExport:
         assert first["ts"] == str(T0 + 1_000)
         assert first["camera_name"] == "A cam 1"
         assert first["category_key"] == "drink"
+        assert first["menu_item_id"] == str(api_env.ids["menu_a"])
+        assert first["menu_item_name"] == "Spritzer"
         assert first["is_canonical"] == "1"
+        assert rows[1]["menu_item_id"] == "" and rows[1]["menu_item_name"] == ""
 
         all_rows = self._rows(client, rid, canonical_only=False)
         assert len(all_rows) == 4
