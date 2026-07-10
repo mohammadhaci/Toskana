@@ -57,7 +57,18 @@ def cmd_seed(config: AppConfig, args: argparse.Namespace) -> int:
     session_factory = make_session_factory(engine)
     with session_factory() as session:
         restaurant = seed(session)
-    print(f"Seeded restaurant '{restaurant.name}' (slug={restaurant.slug})")
+        name, slug = restaurant.name, restaurant.slug
+        demo_sources = [
+            camera.source_url
+            for camera in restaurant.cameras
+            if camera.source_type == "file" and camera.source_url.endswith(".mp4")
+        ]
+    print(f"Seeded restaurant '{name}' (slug={slug})")
+
+    from toskana.demo_videos import ensure_demo_videos
+
+    for path in ensure_demo_videos(demo_sources):
+        print(f"Generated demo video {path}")
     return 0
 
 

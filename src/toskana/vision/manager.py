@@ -39,6 +39,7 @@ from toskana.db.models import (
     Restaurant,
 )
 from toskana.events.bus import TOPIC_GAP, EventBus
+from toskana.vision.capture import SourceOpenError
 from toskana.vision.detector import TrackedDetection
 from toskana.vision.drift import DriftDetector
 from toskana.vision.line_crossing import LineSpec
@@ -332,6 +333,17 @@ class PipelineManager:
         crashed = False
         try:
             entry.pipeline.run_once()
+        except SourceOpenError as exc:
+            crashed = True
+            entry.last_error = f"{type(exc).__name__}: {exc}"
+            logger.error(
+                "camera %s (%s): %s — check the camera's source URL in "
+                "Admin -> Cameras (for the demo restaurant, run `toskana seed` "
+                "to generate the demo videos)",
+                entry.camera_id,
+                entry.name,
+                exc,
+            )
         except Exception as exc:  # noqa: BLE001 - keep the error observable in status()
             crashed = True
             entry.last_error = f"{type(exc).__name__}: {exc}"
