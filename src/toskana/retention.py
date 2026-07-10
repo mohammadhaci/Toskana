@@ -87,6 +87,7 @@ def cleanup_snapshots(
         for path in session.scalars(
             select(Event.snapshot_path).where(Event.snapshot_path.is_not(None))
         )
+        if path is not None
     }
     orphans_removed = _prune_orphans(base, referenced, cutoff_ms)
     removed_dirs = _prune_empty_dirs(base)
