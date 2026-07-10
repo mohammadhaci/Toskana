@@ -165,6 +165,7 @@ def api_env(tmp_path: Path) -> ApiEnv:
         active_restaurant_slug="resta",
         db_path=db_path,
         snapshots_dir=str(snapshots_dir),
+        uploads_dir=str(tmp_path / "uploads"),
         detector_backend="synthetic",
     )
     app = create_app(config, start_pipelines=False)

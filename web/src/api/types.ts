@@ -344,6 +344,49 @@ export interface ReconcileRun {
   created_ts: number;
 }
 
+// -- video analysis --------------------------------------------------------------------
+
+export type AnalysisStatus =
+  | "queued"
+  | "downloading"
+  | "running"
+  | "done"
+  | "error"
+  | "cancelled";
+
+export type AnalysisBackend = "yolo" | "synthetic";
+
+/** One in-memory analysis job (jobs do not survive a server restart). */
+export interface AnalysisJob {
+  id: string;
+  restaurant_id: number;
+  status: AnalysisStatus;
+  video_name: string;
+  source_url: string | null;
+  backend: string;
+  /** Camera/line rows the job counts through (null until the video is ready). */
+  camera_id: number | null;
+  line_id: number | null;
+  frames_done: number;
+  frames_total: number | null;
+  /** counts[direction][class_name] with direction in {out, in}. */
+  counts: Record<string, Record<string, number>>;
+  total_out: number;
+  total_in: number;
+  error: string | null;
+  created_ts: number;
+  finished_ts: number | null;
+}
+
+/** Multipart form for POST /restaurants/{rid}/analysis (file XOR url). */
+export interface AnalysisJobCreate {
+  file?: File;
+  url?: string;
+  backend?: AnalysisBackend;
+  line?: { x1: number; y1: number; x2: number; y2: number };
+  count_directions?: string;
+}
+
 // -- system --------------------------------------------------------------------------
 
 export interface SystemHealth {

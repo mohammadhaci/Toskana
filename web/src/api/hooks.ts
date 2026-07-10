@@ -156,6 +156,20 @@ export function useReconcileRuns(rid: number | null) {
   });
 }
 
+/** Set of analysis states that still change — drives the polling interval. */
+const ANALYSIS_ACTIVE = new Set(["queued", "downloading", "running"]);
+
+/** Analysis jobs, polled every ~2s while at least one job is still active. */
+export function useAnalysisJobs(rid: number | null, intervalMs = 2000) {
+  return useQuery({
+    queryKey: ["analysis", rid],
+    queryFn: () => api.listAnalysisJobs(rid as number),
+    enabled: rid !== null,
+    refetchInterval: (query) =>
+      query.state.data?.some((job) => ANALYSIS_ACTIVE.has(job.status)) ? intervalMs : false,
+  });
+}
+
 // -- mutations (invalidate the matching list key) ------------------------------
 
 type Err = { onSuccess?: () => void; onError?: (error: Error) => void };

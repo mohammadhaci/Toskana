@@ -2,6 +2,8 @@
 
 import { authHeaders, notifyUnauthorized, withToken } from "./auth";
 import type {
+  AnalysisJob,
+  AnalysisJobCreate,
   Camera,
   CameraCreate,
   CameraStatus,
@@ -206,6 +208,27 @@ export const api = {
   },
   listReconcileRuns: (rid: number) =>
     request<Page<ReconcileRun>>(`/restaurants/${rid}/reconcile-runs${PAGE_ALL}`),
+
+  // -- video analysis -------------------------------------------------------------------------------
+  listAnalysisJobs: (rid: number) => request<AnalysisJob[]>(`/restaurants/${rid}/analysis`),
+  getAnalysisJob: (rid: number, jobId: string) =>
+    request<AnalysisJob>(`/restaurants/${rid}/analysis/${jobId}`),
+  createAnalysisJob: (rid: number, body: AnalysisJobCreate) => {
+    const form = new FormData();
+    if (body.file) form.append("file", body.file);
+    if (body.url) form.append("url", body.url);
+    if (body.backend) form.append("backend", body.backend);
+    if (body.line) {
+      form.append("x1", String(body.line.x1));
+      form.append("y1", String(body.line.y1));
+      form.append("x2", String(body.line.x2));
+      form.append("y2", String(body.line.y2));
+    }
+    if (body.count_directions) form.append("count_directions", body.count_directions);
+    return request<AnalysisJob>(`/restaurants/${rid}/analysis`, { method: "POST", body: form });
+  },
+  cancelAnalysisJob: (rid: number, jobId: string) =>
+    request<AnalysisJob>(`/restaurants/${rid}/analysis/${jobId}/cancel`, { method: "POST" }),
 };
 
 /** URL helpers for media endpoints consumed by <img>/<a> directly.

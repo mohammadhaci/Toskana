@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 
 import { mediaUrl } from "../api/client";
 import {
@@ -41,8 +42,16 @@ export default function EventsPage() {
   const { t, i18n } = useTranslation();
   const rid = useActiveRestaurantId();
   const toast = useToast();
-  const [draft, setDraft] = useState<EventFilters>(defaultEventFilters);
-  const [applied, setApplied] = useState<EventFilters>(defaultEventFilters);
+  // Deep links (e.g. from the Analysis page) preselect a camera: /events?camera_id=7
+  const [searchParams] = useSearchParams();
+  const [initialFilters] = useState<EventFilters>(() => {
+    const cameraParam = Number(searchParams.get("camera_id"));
+    return Number.isInteger(cameraParam) && cameraParam > 0
+      ? { ...defaultEventFilters, camera_id: cameraParam }
+      : defaultEventFilters;
+  });
+  const [draft, setDraft] = useState<EventFilters>(initialFilters);
+  const [applied, setApplied] = useState<EventFilters>(initialFilters);
 
   const query = useMemo(() => filtersToQuery(applied), [applied]);
   const { data, isLoading, isError, refetch } = useEvents(rid, query);

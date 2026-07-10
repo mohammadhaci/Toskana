@@ -8,6 +8,7 @@ const PAGES: Array<{ to: string; key: string; icon: string }> = [
   { to: "/live", key: "nav.live", icon: "📺" },
   { to: "/stats", key: "nav.stats", icon: "📊" },
   { to: "/events", key: "nav.events", icon: "🧾" },
+  { to: "/analysis", key: "nav.analysis", icon: "🎬" },
   { to: "/reconcile", key: "nav.reconcile", icon: "🧮" },
 ];
 
@@ -25,6 +26,7 @@ function titleKeyFor(pathname: string): string {
   if (pathname.startsWith("/live")) return "nav.live";
   if (pathname.startsWith("/stats")) return "nav.stats";
   if (pathname.startsWith("/events")) return "nav.events";
+  if (pathname.startsWith("/analysis")) return "nav.analysis";
   if (pathname.startsWith("/reconcile")) return "nav.reconcile";
   if (pathname.startsWith("/system")) return "nav.system";
   if (pathname.startsWith("/admin/restaurants")) return "nav.restaurants";

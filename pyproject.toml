@@ -28,6 +28,7 @@ ml = [
     "torch",
     "torchvision",
     "ultralytics",
+    "yt-dlp",
 ]
 train = [
     "yt-dlp",

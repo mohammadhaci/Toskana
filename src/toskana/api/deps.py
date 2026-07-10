@@ -16,6 +16,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
+from toskana.analysis import AnalysisJobManager
 from toskana.config import AppConfig
 from toskana.db.models import Camera, Category, ExitGroup, Line, ModelRegistry, Restaurant
 from toskana.events.bus import EventBus
@@ -34,6 +35,10 @@ def get_manager(request: Request) -> PipelineManager:
     return request.app.state.manager  # type: ignore[no-any-return]
 
 
+def get_analysis(request: Request) -> AnalysisJobManager:
+    return request.app.state.analysis  # type: ignore[no-any-return]
+
+
 def get_session(request: Request) -> Iterator[Session]:
     factory = request.app.state.session_factory
     with factory() as session:
@@ -44,6 +49,7 @@ SessionDep = Annotated[Session, Depends(get_session)]
 ConfigDep = Annotated[AppConfig, Depends(get_config)]
 BusDep = Annotated[EventBus, Depends(get_bus)]
 ManagerDep = Annotated[PipelineManager, Depends(get_manager)]
+AnalysisDep = Annotated[AnalysisJobManager, Depends(get_analysis)]
 
 
 @dataclass(frozen=True)

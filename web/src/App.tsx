@@ -7,6 +7,7 @@ import { EmptyState } from "./components/ui";
 import LivePage from "./pages/LivePage";
 import StatsPage from "./pages/StatsPage";
 import EventsPage from "./pages/EventsPage";
+import AnalysisPage from "./pages/AnalysisPage";
 import ReconcilePage from "./pages/ReconcilePage";
 import SystemPage from "./pages/SystemPage";
 import RestaurantsPage from "./pages/admin/RestaurantsPage";
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/live" element={<LivePage />} />
           <Route path="/stats" element={<StatsPage />} />
           <Route path="/events" element={<EventsPage />} />
+          <Route path="/analysis" element={<AnalysisPage />} />
           <Route path="/reconcile" element={<ReconcilePage />} />
           <Route path="/system" element={<SystemPage />} />
           <Route path="/admin/restaurants" element={<RestaurantsPage />} />

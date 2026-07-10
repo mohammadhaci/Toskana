@@ -730,6 +730,23 @@ table.data tfoot td {
   background: var(--accent-soft);
 }
 
+/* ---------- progress bar (analysis jobs) ---------- */
+
+.progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--hairline);
+  overflow: hidden;
+  margin-bottom: var(--s3);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 300ms ease;
+}
+
 /* ---------- key/value list (system) ---------- */
 
 .kv {

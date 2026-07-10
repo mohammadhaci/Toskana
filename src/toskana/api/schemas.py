@@ -529,6 +529,34 @@ class ReconcileRunRead(APIModel):
     created_ts: int
 
 
+# -- video analysis ----------------------------------------------------------------------------
+
+AnalysisStatus = Literal["queued", "downloading", "running", "done", "error", "cancelled"]
+
+
+class AnalysisJobRead(APIModel):
+    """One in-memory analysis job (jobs do not survive a server restart)."""
+
+    id: str
+    restaurant_id: int
+    status: AnalysisStatus
+    video_name: str
+    source_url: str | None = None
+    backend: str
+    #: Camera/line rows the job counts through (None until the video is ready).
+    camera_id: int | None = None
+    line_id: int | None = None
+    frames_done: int = 0
+    frames_total: int | None = None
+    #: counts[direction][class_name] with direction in {out, in}.
+    counts: dict[str, dict[str, int]]
+    total_out: int = 0
+    total_in: int = 0
+    error: str | None = None
+    created_ts: int
+    finished_ts: int | None = None
+
+
 # -- system ----------------------------------------------------------------------------------------
 
 

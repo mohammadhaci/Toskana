@@ -12,6 +12,7 @@
     "live": "Live",
     "stats": "Statistiken",
     "events": "Ereignisse",
+    "analysis": "Analyse",
     "reconcile": "Abgleich",
     "system": "System",
     "admin": "Verwaltung",
@@ -163,6 +164,40 @@
     "empty": "Keine Ereignisse für diese Filter.",
     "emptyHint": "Filter lockern oder Zeitraum erweitern.",
     "total": "{{count}} Ereignisse"
+  },
+  "analysis": {
+    "uploadTitle": "Video analysieren",
+    "intro": "Laden Sie ein Video Ihrer Durchreiche hoch (oder fügen Sie einen Link ein, z. B. YouTube). Die KI zählt alle Getränke und Speisen, die die Zähllinie kreuzen, und zeigt das Ergebnis unten an.",
+    "dropHint": "Video hier ablegen oder klicken zum Auswählen (MP4, AVI, …)",
+    "urlLabel": "… oder Video-Link einfügen",
+    "advanced": "Erweiterte Einstellungen (Zähllinie & Detektor)",
+    "backendLabel": "Detektor",
+    "backendYolo": "YOLO (echte Videos)",
+    "backendSynthetic": "Synthetisch (nur Demo-Clips)",
+    "backendSyntheticHint": "Der synthetische Detektor erkennt nur die generierten Demo-Clips — für echte Aufnahmen YOLO verwenden.",
+    "line": {
+      "x1": "Linienanfang X",
+      "y1": "Linienanfang Y",
+      "x2": "Linienende X",
+      "y2": "Linienende Y",
+      "hint": "Die Zähllinie als Anteil des Bilds (0–1). Standard: eine senkrechte Linie durch die Mitte."
+    },
+    "submit": "Analyse starten",
+    "submitting": "Wird gestartet …",
+    "submitted": "Analyse gestartet — der Fortschritt erscheint unten.",
+    "cancel": "Abbrechen",
+    "status": {
+      "queued": "Wartet",
+      "downloading": "Wird geladen",
+      "running": "Analysiert",
+      "done": "Fertig",
+      "error": "Fehler",
+      "cancelled": "Abgebrochen"
+    },
+    "frames": "Bild {{done}} von {{total}}",
+    "viewEvents": "Gezählte Ereignisse anzeigen",
+    "empty": "Noch keine Analysen.",
+    "emptyHint": "Laden Sie oben ein Video hoch — Aufträge laufen nacheinander und verschwinden nach einem Server-Neustart aus dieser Liste (die gezählten Ereignisse bleiben erhalten)."
   },
   "reconcile": {
     "title": "POS-Abgleich",

@@ -41,6 +41,7 @@ from starlette.types import Scope
 
 from toskana import __version__
 from toskana.alerts import AlertNotifier
+from toskana.analysis import AnalysisJobManager
 from toskana.api import ws as ws_module
 from toskana.api.auth import TokenAuthMiddleware
 from toskana.api.routes import api_router
@@ -108,6 +109,7 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         bus = EventBus()
         writer = EventWriter(make_writer_session_factory(config.db_path), bus=bus)
         manager = PipelineManager(config, bus=bus, session_factory=session_factory)
+        analysis = AnalysisJobManager(config, bus=bus, session_factory=session_factory)
         broadcaster = LiveBroadcaster(bus)
         retention = RetentionJob(config, session_factory)
         notifier = (
@@ -124,6 +126,7 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         app.state.bus = bus
         app.state.writer = writer
         app.state.manager = manager
+        app.state.analysis = analysis
         app.state.broadcaster = broadcaster
         app.state.dedup = dedup
         app.state.retention = retention
@@ -143,6 +146,7 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
             yield
         finally:
             await asyncio.to_thread(manager.stop_all)
+            await asyncio.to_thread(analysis.stop)  # before writer.stop: events flush
             await asyncio.to_thread(retention.stop)
             if notifier is not None:
                 await asyncio.to_thread(notifier.stop)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from toskana.api.routes import (
+    analysis,
     cameras,
     categories,
     events,
@@ -34,5 +35,6 @@ api_router.include_router(events.router)
 api_router.include_router(stats.router)
 api_router.include_router(sessions.router)
 api_router.include_router(reconcile.router)
+api_router.include_router(analysis.router)
 api_router.include_router(stream.router)
 api_router.include_router(system.router)
