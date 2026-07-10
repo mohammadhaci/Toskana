@@ -237,8 +237,143 @@ def cmd_simulate(config: AppConfig, args: argparse.Namespace) -> int:
     return 0
 
 
+def _line_spec(coords: tuple[float, float, float, float], name: str) -> Any:
+    from toskana.vision.line_crossing import LineSpec
+
+    x1, y1, x2, y2 = coords
+    return LineSpec(x1=x1, y1=y1, x2=x2, y2=y2, line_id=None, name=name)
+
+
 def cmd_eval_counting(config: AppConfig, args: argparse.Namespace) -> int:
-    print("toskana eval-counting: not implemented until M10")
+    """Replay annotated clip(s) through the counting pipeline and score the
+    canonical counts against ``ground_truth.json`` (precision/recall/MAE per
+    category and per hour of day)."""
+    from toskana.eval.runner import evaluate_videos, record_eval_run
+
+    video = Path(args.video)
+    gt_path = Path(args.gt)
+    for path, label in ((video, "video"), (gt_path, "ground truth")):
+        if not path.is_file():
+            print(f"{label} not found: {path}", file=sys.stderr)
+            return 1
+    if args.video2 is not None and not Path(args.video2).is_file():
+        print(f"video2 not found: {args.video2}", file=sys.stderr)
+        return 1
+    ground_truth = json.loads(gt_path.read_text(encoding="utf-8"))
+
+    outcome = evaluate_videos(
+        video,
+        _line_spec(args.line, "eval"),
+        ground_truth,
+        backend=args.backend,
+        video2=args.video2,
+        line2=_line_spec(args.line2, "eval-cam2") if args.line2 is not None else None,
+        tolerance_ms=args.tolerance_ms,
+        dedup_window_ms=args.dedup_window_ms,
+        device=config.device,
+    )
+    run_config = {
+        "backend": args.backend,
+        "line": list(args.line),
+        "line2": list(args.line2) if args.line2 is not None else None,
+        "tolerance_ms": args.tolerance_ms,
+        "dedup_window_ms": args.dedup_window_ms,
+        "device": config.device,
+    }
+    run_id: int | None = None
+    if args.db:
+        video_ref = str(video) if args.video2 is None else f"{video},{args.video2}"
+        record = record_eval_run(
+            args.db,
+            config,
+            outcome,
+            video_ref=video_ref,
+            ground_truth_path=str(gt_path),
+            run_config=run_config,
+            name=args.name,
+        )
+        run_id = record.run_id
+
+    overall = outcome.report["overall"]
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "scenario": outcome.scenario,
+                    "frames": outcome.frames,
+                    "raw_measured_total": outcome.raw_measured_total,
+                    "run_id": run_id,
+                    **outcome.report,
+                },
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_eval_report(outcome, run_id=run_id, db=args.db)
+    if args.min_score is not None and (
+        overall["precision"] < args.min_score or overall["recall"] < args.min_score
+    ):
+        print(
+            f"FAIL: precision {overall['precision']:.4f} / recall {overall['recall']:.4f} "
+            f"below --min-score {args.min_score}",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _print_eval_report(outcome: Any, *, run_id: int | None, db: str | None) -> None:
+    report = outcome.report
+    overall = report["overall"]
+    if outcome.scenario:
+        print(f"scenario: {outcome.scenario}")
+    frames = "  ".join(f"{cam}={n}" for cam, n in outcome.frames.items())
+    print(f"frames:   {frames}")
+    print(
+        f"crossings: ground truth {overall['gt']}, measured {overall['measured']} "
+        f"canonical ({outcome.raw_measured_total} raw)"
+    )
+    print(
+        f"overall:  precision {overall['precision']:.4f}  recall {overall['recall']:.4f}  "
+        f"f1 {overall['f1']:.4f}  count MAE {overall['count_mae']:.4f}"
+    )
+    header = (
+        f"{'':12s} {'gt':>4s} {'meas':>4s} {'tp':>4s} {'fp':>4s} {'fn':>4s} "
+        f"{'prec':>7s} {'rec':>7s}"
+    )
+    for title, section in (("per category", "per_category"), ("per hour", "per_hour")):
+        print(f"{title}:")
+        print(header)
+        for key, row in report[section].items():
+            print(
+                f"  {key:10s} {row['gt']:>4d} {row['measured']:>4d} {row['tp']:>4d} "
+                f"{row['fp']:>4d} {row['fn']:>4d} {row['precision']:>7.4f} {row['recall']:>7.4f}"
+            )
+    if run_id is not None:
+        print(f"recorded counting_eval_runs row {run_id} in {db}")
+
+
+def cmd_cleanup(config: AppConfig, args: argparse.Namespace) -> int:
+    """Run the snapshot retention pass once (for cron / manual use)."""
+    from toskana.db.base import make_engine, make_session_factory
+    from toskana.retention import cleanup_snapshots
+
+    if not Path(config.db_path).exists():
+        print(f"Database {config.db_path} does not exist — run `toskana init-db` first")
+        return 1
+    engine = make_engine(config.db_path)
+    try:
+        with make_session_factory(engine)() as session:
+            result = cleanup_snapshots(config, session)
+    finally:
+        engine.dispose()
+    print(
+        f"retention ({config.snapshot_retention_days}d): "
+        f"{result.deleted_snapshots} expired snapshot(s) deleted, "
+        f"{result.cleared_events} event reference(s) cleared, "
+        f"{result.orphans_removed} orphan(s) removed, "
+        f"{result.removed_dirs} empty dir(s) pruned"
+    )
     return 0
 
 
@@ -293,7 +428,68 @@ def build_parser() -> argparse.ArgumentParser:
         help="Persist events (and snapshots) into this SQLite database (default: no persistence)",
     )
     simulate.add_argument("--json", action="store_true", help="Print a JSON summary")
-    sub.add_parser("eval-counting", help="Evaluate counts against ground truth (stub until M10)")
+    evaluate = sub.add_parser(
+        "eval-counting",
+        help="Replay annotated clip(s) and score counts against a ground_truth.json",
+    )
+    evaluate.add_argument("--video", required=True, help="Path to the annotated video clip")
+    evaluate.add_argument(
+        "--gt",
+        required=True,
+        help="Path to ground_truth.json ('crossings' or two-camera 'canonical_crossings')",
+    )
+    evaluate.add_argument(
+        "--line",
+        type=_parse_line_arg,
+        default=(0.5, 0.0, 0.5, 1.0),
+        metavar="X1,Y1,X2,Y2",
+        help="Counting line, normalized 0..1 (default: 0.5,0.0,0.5,1.0 — vertical center)",
+    )
+    evaluate.add_argument(
+        "--video2",
+        default=None,
+        help="Second camera of the same exit; canonical counts after dedup are scored",
+    )
+    evaluate.add_argument(
+        "--line2",
+        type=_parse_line_arg,
+        default=None,
+        metavar="X1,Y1,X2,Y2",
+        help="Counting line for --video2 (default: same as --line)",
+    )
+    evaluate.add_argument(
+        "--backend",
+        choices=["synthetic", "yolo"],
+        default="synthetic",
+        help="Tracking backend (default: synthetic)",
+    )
+    evaluate.add_argument(
+        "--tolerance-ms",
+        type=int,
+        default=2000,
+        help="Max |Δt| between a ground-truth and a measured crossing to match (default: 2000)",
+    )
+    evaluate.add_argument(
+        "--dedup-window-ms",
+        type=int,
+        default=2000,
+        help="Cross-camera dedup window for two-camera runs (default: 2000)",
+    )
+    evaluate.add_argument(
+        "--db",
+        default=None,
+        metavar="PATH",
+        help="Record the run into counting_eval_runs in this SQLite database",
+    )
+    evaluate.add_argument("--name", default=None, help="Name for the recorded eval run")
+    evaluate.add_argument(
+        "--min-score",
+        type=float,
+        default=None,
+        help="Exit non-zero when overall precision or recall falls below this (e.g. 0.9)",
+    )
+    evaluate.add_argument("--json", action="store_true", help="Print the full report as JSON")
+    sub.add_parser("cleanup", help="Run the snapshot retention pass once (cron/manual)")
     return parser
 
 
@@ -303,6 +499,7 @@ COMMANDS = {
     "run": cmd_run,
     "simulate": cmd_simulate,
     "eval-counting": cmd_eval_counting,
+    "cleanup": cmd_cleanup,
 }
 
 

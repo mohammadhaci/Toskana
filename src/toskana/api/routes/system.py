@@ -40,6 +40,22 @@ def health(request: Request, session: SessionDep, manager: ManagerDep) -> schema
     )
 
 
+@router.post("/retention/run", response_model=schemas.RetentionRunResult)
+def run_retention(request: Request, config: ConfigDep) -> schemas.RetentionRunResult:
+    """Run the snapshot-retention pass now (it also runs daily on its own)."""
+    job = request.app.state.retention
+    result = job.run_once()
+    return schemas.RetentionRunResult(
+        snapshot_retention_days=config.snapshot_retention_days,
+        cutoff_ms=result.cutoff_ms,
+        deleted_snapshots=result.deleted_snapshots,
+        cleared_events=result.cleared_events,
+        orphans_removed=result.orphans_removed,
+        removed_dirs=result.removed_dirs,
+        runs=job.runs,
+    )
+
+
 @router.get("/info", response_model=schemas.SystemInfo)
 def info(session: SessionDep, config: ConfigDep) -> schemas.SystemInfo:
     torch_available = importlib.util.find_spec("torch") is not None

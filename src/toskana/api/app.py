@@ -10,6 +10,9 @@
   --no-pipeline``),
 * the :class:`~toskana.api.ws.LiveBroadcaster` forwarding bus events to
   ``/ws/live`` clients,
+* a :class:`~toskana.retention.RetentionJob` deleting expired event
+  snapshots daily (manually triggerable via ``POST
+  /api/system/retention/run``),
 * the REST routers under ``/api`` and the built dashboard (``web/dist``)
   at ``/`` when present.
 
@@ -43,6 +46,7 @@ from toskana.api.ws import LiveBroadcaster
 from toskana.config import AppConfig
 from toskana.events.bus import EventBus
 from toskana.events.writer import EventWriter, make_writer_session_factory
+from toskana.retention import RetentionJob
 from toskana.vision.dedup import build_dedup_engine
 from toskana.vision.manager import PipelineManager
 
@@ -103,6 +107,7 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         writer = EventWriter(make_writer_session_factory(config.db_path), bus=bus)
         manager = PipelineManager(config, bus=bus, session_factory=session_factory)
         broadcaster = LiveBroadcaster(bus)
+        retention = RetentionJob(config, session_factory)
 
         dedup = await asyncio.to_thread(
             build_dedup_engine, session_factory, config.active_restaurant_slug, bus=bus
@@ -114,11 +119,13 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         app.state.manager = manager
         app.state.broadcaster = broadcaster
         app.state.dedup = dedup
+        app.state.retention = retention
 
         writer.start()
         if dedup is not None:
             dedup.start()  # after writer.start(): inserts queue before demotions
         broadcaster.start(asyncio.get_running_loop())
+        retention.start()  # daily snapshot-retention pass (GDPR)
         if start_pipelines:
             started = await asyncio.to_thread(manager.start_all)
             logger.info("pipeline manager started %d camera(s)", started)
@@ -126,6 +133,7 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
             yield
         finally:
             await asyncio.to_thread(manager.stop_all)
+            await asyncio.to_thread(retention.stop)
             if dedup is not None:
                 dedup.stop()
             broadcaster.stop()

@@ -517,6 +517,18 @@ class SystemInfo(APIModel):
     preset_frame_skip: int
 
 
+class RetentionRunResult(APIModel):
+    """Outcome of one snapshot-retention pass (``POST /system/retention/run``)."""
+
+    snapshot_retention_days: int
+    cutoff_ms: int  # snapshots of events older than this were removed
+    deleted_snapshots: int
+    cleared_events: int  # events whose snapshot_path was set to NULL
+    orphans_removed: int  # unreferenced snapshot files removed
+    removed_dirs: int  # empty per-day directories pruned
+    runs: int  # total passes since app start (scheduled + manual)
+
+
 class MessageResponse(APIModel):
     detail: str
 
