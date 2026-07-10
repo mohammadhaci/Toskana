@@ -62,10 +62,17 @@ def cmd_seed(config: AppConfig, args: argparse.Namespace) -> int:
 
 
 def cmd_run(config: AppConfig, args: argparse.Namespace) -> int:
-    print(
-        f"toskana run: server not implemented until M4 "
-        f"(would listen on {config.host}:{config.port})"
-    )
+    """Start the dashboard server (REST + WS + MJPEG + camera pipelines)."""
+    import uvicorn
+
+    from toskana.api.app import create_app
+
+    host = args.host if args.host is not None else config.host
+    port = args.port if args.port is not None else config.port
+    app = create_app(config, start_pipelines=not args.no_pipeline)
+    mode = "API only (--no-pipeline)" if args.no_pipeline else "with camera pipelines"
+    print(f"Toskana dashboard: http://{host}:{port}/  [{mode}]")
+    uvicorn.run(app, host=host, port=port, log_level=config.log_level.lower())
     return 0
 
 
@@ -250,7 +257,18 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init-db", help="Create/upgrade the database schema (alembic upgrade head)")
     sub.add_parser("seed", help="Insert idempotent demo data (restaurant, cameras, mappings)")
-    sub.add_parser("run", help="Start the dashboard server (stub until M4)")
+    run = sub.add_parser("run", help="Start the dashboard server (REST + WS + MJPEG)")
+    run.add_argument(
+        "--no-pipeline",
+        action="store_true",
+        help="Serve the API without starting camera pipelines (tests/administration)",
+    )
+    run.add_argument(
+        "--host", default=None, help="Bind address (overrides config host, default 127.0.0.1)"
+    )
+    run.add_argument(
+        "--port", type=int, default=None, help="Bind port (overrides config port, default 8420)"
+    )
     simulate = sub.add_parser(
         "simulate", help="Run the counting pipeline on a video file (unpaced) and print counts"
     )

@@ -38,6 +38,8 @@ class AppConfig(BaseSettings):
     snapshot_retention_days: int = 30
     device: str = "auto"  # auto | cpu | cuda | mps
     log_level: str = "INFO"
+    detector_backend: str = "synthetic"  # synthetic | yolo
+    loop_file_sources: bool = True  # demo mode: file cameras loop (paced) forever
 
     @classmethod
     def settings_customise_sources(

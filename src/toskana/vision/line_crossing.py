@@ -75,12 +75,17 @@ _DB_DIRECTIONS: dict[str, CountDirections] = {
 }
 
 
-def _parse_count_directions(value: str) -> CountDirections:
+def parse_count_directions(value: str) -> CountDirections:
+    """Translate the DB ``count_directions`` vocabulary; raises on unknown."""
     normalized = "".join(value.split()).lower()
     try:
         return _DB_DIRECTIONS[normalized]
     except KeyError:
         raise ValueError(f"unknown count_directions: {value!r}") from None
+
+
+#: Backwards-compatible private alias (pre-M4 name).
+_parse_count_directions = parse_count_directions
 
 
 @dataclass(frozen=True)

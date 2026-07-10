@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,6 +37,10 @@ logger = logging.getLogger(__name__)
 
 #: counter direction -> ``events.direction`` column value.
 DIRECTION_TO_DB = {"positive": "out", "negative": "in"}
+
+#: Per-frame observer hook: ``(frame_index, ts_ms, frame_bgr, tracked)``.
+#: Called after counters were updated for the frame (M4: live preview/stats).
+FrameHook = Callable[[int, int, Any, list[Any]], None]
 
 
 @dataclass(frozen=True)
@@ -104,10 +109,12 @@ class CameraPipeline:
         *,
         bus: EventBus | None = None,
         tracking_backend: TrackingBackend | None = None,
+        on_frame: FrameHook | None = None,
     ) -> None:
         self.spec = spec
         self.bus = bus
         self._backend = tracking_backend
+        self._on_frame = on_frame
         self._snapshot_saver = (
             SnapshotSaver(spec.snapshots_dir, spec.restaurant_slug)
             if spec.snapshots_dir is not None
@@ -174,6 +181,11 @@ class CameraPipeline:
                     for crossing in counter.update(tracked, ts_ms=ts_ms, frame_index=frame_index):
                         self._emit(crossing, frame, counter, resolver, result)
                 result.frames += 1
+                if self._on_frame is not None:
+                    try:
+                        self._on_frame(frame_index, ts_ms, frame, list(tracked))
+                    except Exception:  # noqa: BLE001 - observer must not kill the pipeline
+                        logger.exception("on_frame hook failed (camera %s)", spec.camera_id)
         return result
 
     # -- internals --------------------------------------------------------------
