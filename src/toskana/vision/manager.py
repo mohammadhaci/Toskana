@@ -77,6 +77,9 @@ class _ManagedCamera:
     pipeline: CameraPipeline
     thread: threading.Thread | None = None
     started_ts: int | None = None  # epoch ms
+    #: True once stop_camera() asked the pipeline to end (a manual stop —
+    #: distinguishes it from crashes / exhausted sources in the stop marker).
+    stop_requested: bool = False
     last_error: str | None = None
     last_frame_ts: int | None = None  # epoch ms
     frame_times: deque[float] = field(default_factory=lambda: deque(maxlen=_FPS_WINDOW))
@@ -204,6 +207,7 @@ class PipelineManager:
         if entry is None:
             return False
         was_running = entry.running
+        entry.stop_requested = True
         if entry.fps_check_timer is not None:
             entry.fps_check_timer.cancel()
         entry.pipeline.stop()
@@ -325,27 +329,43 @@ class PipelineManager:
 
     def _run_pipeline(self, entry: _ManagedCamera) -> None:
         self._publish_marker(entry, "pipeline_start")
+        crashed = False
         try:
             entry.pipeline.run_once()
         except Exception as exc:  # noqa: BLE001 - keep the error observable in status()
+            crashed = True
             entry.last_error = f"{type(exc).__name__}: {exc}"
             logger.exception("pipeline for camera %s crashed", entry.camera_id)
         finally:
-            self._publish_marker(entry, "pipeline_stop")
+            # Manual stop -> pipeline_stop; a crash or an exhausted source
+            # ends unexpectedly and alerts (AlertNotifier: camera_down).
+            if entry.stop_requested:
+                reason = "pipeline_stop"
+            elif crashed:
+                reason = "pipeline_error"
+            else:
+                reason = "pipeline_ended"
+            self._publish_marker(entry, reason, detail=entry.last_error if crashed else None)
 
-    def _publish_marker(self, entry: _ManagedCamera, reason: str) -> None:
-        """Record a zero-length data_gaps marker row for the camera session."""
+    def _publish_marker(
+        self, entry: _ManagedCamera, reason: str, *, detail: str | None = None
+    ) -> None:
+        """Record a zero-length data_gaps marker row for the camera session.
+
+        ``detail`` rides along on the bus for subscribers (AlertNotifier);
+        the DB writer ignores it (not a ``data_gaps`` column).
+        """
         now_ms = int(time.time() * 1000)
-        self._bus.publish(
-            TOPIC_GAP,
-            {
-                "restaurant_id": entry.spec.restaurant_id,
-                "camera_id": entry.camera_id,
-                "from_ts": now_ms,
-                "to_ts": now_ms,
-                "reason": reason,
-            },
-        )
+        payload: dict[str, Any] = {
+            "restaurant_id": entry.spec.restaurant_id,
+            "camera_id": entry.camera_id,
+            "from_ts": now_ms,
+            "to_ts": now_ms,
+            "reason": reason,
+        }
+        if detail is not None:
+            payload["detail"] = detail
+        self._bus.publish(TOPIC_GAP, payload)
 
     def _make_frame_hook(self, entry: _ManagedCamera) -> Any:
         def on_frame(

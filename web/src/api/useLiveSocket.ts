@@ -3,6 +3,7 @@
 
 import { useEffect, useReducer, useRef } from "react";
 
+import { withToken } from "./auth";
 import { initialLiveState, liveReducer, type LiveState } from "./liveReducer";
 import type { LiveMessage } from "./types";
 
@@ -11,7 +12,8 @@ const BACKOFF_MAX_MS = 30_000;
 
 export function liveSocketUrl(loc: { protocol: string; host: string } = window.location): string {
   const proto = loc.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${loc.host}/ws/live`;
+  // WebSockets cannot send headers: a stored API token rides along as ?token=.
+  return withToken(`${proto}//${loc.host}/ws/live`);
 }
 
 export function useLiveSocket(enabled = true): LiveState {

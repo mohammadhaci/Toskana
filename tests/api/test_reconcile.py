@@ -1,14 +1,18 @@
 """POS reconciliation: CSV upload, per-category variance report, unknown
-categories and malformed input."""
+categories, malformed input, and the persisted run history."""
 
 from __future__ import annotations
 
+import json
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from tests.api.conftest import ApiEnv, add_event
+from toskana.db.models import ReconcileRun
 
 VIENNA = ZoneInfo("Europe/Vienna")
 DAY = "2026-07-09"
@@ -166,3 +170,48 @@ class TestReconcile:
             ).status_code
             == 404
         )
+
+
+class TestReconcileRuns:
+    def test_upload_persists_run(self, client: TestClient, api_env: ApiEnv) -> None:
+        _seed_day(api_env)
+        rid = api_env.ids["rest_a"]
+        body = _upload(
+            client, rid, f"category_key,quantity,date\ndrink,2,{DAY}\nmain,1,{DAY}\n"
+        ).json()
+        assert isinstance(body["run_id"], str) and len(body["run_id"]) == 26  # ULID
+
+        with api_env.session() as session:
+            (run,) = session.scalars(select(ReconcileRun)).all()
+        assert run.id == body["run_id"]
+        assert run.restaurant_id == rid
+        assert run.date == body["default_date"]
+        assert run.uploaded_filename == "pos.csv"
+        assert run.total_pos_quantity == 3.0
+        assert run.total_counted_net == 3
+        assert run.created_ts > 0
+        assert json.loads(run.rows_json) == body["rows"]  # exact row payload round-trips
+
+    def test_history_lists_newest_first(self, client: TestClient, api_env: ApiEnv) -> None:
+        _seed_day(api_env)
+        rid = api_env.ids["rest_a"]
+        first = _upload(client, rid, "category_key,quantity\ndrink,2\n", date=DAY).json()
+        time.sleep(0.002)  # distinct created_ts (ms) => deterministic ordering
+        second = _upload(client, rid, "category_key,quantity\nmain,1\n", date=DAY).json()
+
+        history = client.get(f"/api/restaurants/{rid}/reconcile-runs").json()
+        assert history["total"] == 2
+        assert [run["id"] for run in history["items"]] == [second["run_id"], first["run_id"]]
+        newest = history["items"][0]
+        assert newest["uploaded_filename"] == "pos.csv"
+        assert newest["date"] == DAY
+        assert newest["total_counted_net"] == 1
+        assert newest["rows"][0]["category_key"] == "main"
+        assert newest["rows"][0]["variance"] == 0.0
+
+    def test_history_tenant_isolation(self, client: TestClient, api_env: ApiEnv) -> None:
+        _seed_day(api_env)
+        _upload(client, api_env.ids["rest_a"], f"category_key,quantity,date\ndrink,2,{DAY}\n")
+        empty = client.get(f"/api/restaurants/{api_env.ids['rest_b']}/reconcile-runs").json()
+        assert empty["total"] == 0 and empty["items"] == []
+        assert client.get("/api/restaurants/999999/reconcile-runs").status_code == 404

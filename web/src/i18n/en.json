@@ -27,6 +27,14 @@
     "de": "German",
     "en": "English"
   },
+  "auth": {
+    "title": "API token required",
+    "hint": "This server requires an API token (api_token in config.yaml). Enter it to connect the dashboard; it is stored in this browser only.",
+    "tokenLabel": "API token",
+    "placeholder": "Paste token …",
+    "save": "Save & reload",
+    "invalidStored": "The stored token was rejected — enter a valid one."
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -116,7 +124,16 @@
     "totalOut": "Total out",
     "totalIn": "Total returned",
     "totalNet": "Net",
-    "byItemTitle": "By menu item"
+    "byItemTitle": "By menu item",
+    "gaps": {
+      "title": "Data gaps",
+      "count": "{{count}} gaps",
+      "hint": "Camera outages or drift alarms occurred in the selected range — counts may be incomplete.",
+      "from": "From",
+      "to": "To",
+      "reason": "Reason",
+      "ongoing": "ongoing"
+    }
   },
   "events": {
     "title": "Events",
@@ -161,7 +178,12 @@
     "totalPos": "POS total",
     "totalCounted": "Counted (net)",
     "empty": "No reconciliation run yet.",
-    "emptyHint": "Upload a POS CSV to compare expected vs. counted quantities."
+    "emptyHint": "Upload a POS CSV to compare expected vs. counted quantities.",
+    "historyTitle": "Past reconciliations",
+    "historyEmpty": "No stored reconciliations yet.",
+    "historyEmptyHint": "Every upload is stored and appears here for auditing.",
+    "file": "File",
+    "view": "View"
   },
   "admin": {
     "restaurants": {
@@ -291,6 +313,21 @@
     "snapshotsDir": "Snapshots directory",
     "loopFiles": "Loop file sources",
     "noPipelines": "No pipelines started.",
-    "noPipelinesHint": "The server runs without camera pipelines (--no-pipeline) or all cameras are disabled."
+    "noPipelinesHint": "The server runs without camera pipelines (--no-pipeline) or all cameras are disabled.",
+    "driftOk": "View OK",
+    "driftAlarm": "Drift!",
+    "driftNotCalibrated": "Not calibrated",
+    "calibrate": "Calibrate",
+    "calibrateHint": "Store the current camera image as the drift reference",
+    "calibrated": "Calibration reference updated.",
+    "retentionTitle": "Snapshot retention",
+    "retentionIntro": "Event snapshots older than {{days}} days are deleted by a daily job; run the pass now if needed.",
+    "retentionRun": "Run retention cleanup",
+    "retentionRunning": "Cleaning …",
+    "retentionDone": "Cleanup done: {{snapshots}} snapshot(s) deleted, {{orphans}} orphan(s) removed.",
+    "retentionDeleted": "Snapshots deleted",
+    "retentionCleared": "Event references cleared",
+    "retentionOrphans": "Orphans removed",
+    "retentionRuns": "Passes since start"
   }
 }

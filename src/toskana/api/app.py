@@ -40,7 +40,9 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from toskana import __version__
+from toskana.alerts import AlertNotifier
 from toskana.api import ws as ws_module
+from toskana.api.auth import TokenAuthMiddleware
 from toskana.api.routes import api_router
 from toskana.api.ws import LiveBroadcaster
 from toskana.config import AppConfig
@@ -108,6 +110,11 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         manager = PipelineManager(config, bus=bus, session_factory=session_factory)
         broadcaster = LiveBroadcaster(bus)
         retention = RetentionJob(config, session_factory)
+        notifier = (
+            AlertNotifier(config.alert_webhook_url, bus=bus, session_factory=session_factory)
+            if config.alert_webhook_url
+            else None
+        )
 
         dedup = await asyncio.to_thread(
             build_dedup_engine, session_factory, config.active_restaurant_slug, bus=bus
@@ -120,12 +127,15 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         app.state.broadcaster = broadcaster
         app.state.dedup = dedup
         app.state.retention = retention
+        app.state.notifier = notifier
 
         writer.start()
         if dedup is not None:
             dedup.start()  # after writer.start(): inserts queue before demotions
         broadcaster.start(asyncio.get_running_loop())
         retention.start()  # daily snapshot-retention pass (GDPR)
+        if notifier is not None:
+            notifier.start()  # before pipelines: startup crashes must alert too
         if start_pipelines:
             started = await asyncio.to_thread(manager.start_all)
             logger.info("pipeline manager started %d camera(s)", started)
@@ -134,6 +144,8 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         finally:
             await asyncio.to_thread(manager.stop_all)
             await asyncio.to_thread(retention.stop)
+            if notifier is not None:
+                await asyncio.to_thread(notifier.stop)
             if dedup is not None:
                 dedup.stop()
             broadcaster.stop()
@@ -142,6 +154,9 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
     app = FastAPI(title="Toskana", version=__version__, lifespan=lifespan)
     app.state.config = config
 
+    if config.api_token:
+        # Added before CORS so CORS wraps it (401s carry CORS headers in dev).
+        app.add_middleware(TokenAuthMiddleware, token=config.api_token)
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=CORS_ORIGIN_REGEX,

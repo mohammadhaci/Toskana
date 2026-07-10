@@ -137,6 +137,25 @@ export function useStatsSummary(rid: number | null) {
   });
 }
 
+export function useDataGaps(
+  rid: number | null,
+  params: { from_ts?: number; to_ts?: number; camera_id?: number },
+) {
+  return useQuery({
+    queryKey: ["data-gaps", rid, params],
+    queryFn: () => api.listDataGaps(rid as number, params),
+    enabled: rid !== null,
+  });
+}
+
+export function useReconcileRuns(rid: number | null) {
+  return useQuery({
+    queryKey: ["reconcile-runs", rid],
+    queryFn: () => api.listReconcileRuns(rid as number),
+    enabled: rid !== null,
+  });
+}
+
 // -- mutations (invalidate the matching list key) ------------------------------
 
 type Err = { onSuccess?: () => void; onError?: (error: Error) => void };

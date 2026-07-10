@@ -27,6 +27,14 @@
     "de": "Deutsch",
     "en": "Englisch"
   },
+  "auth": {
+    "title": "API-Token erforderlich",
+    "hint": "Dieser Server verlangt ein API-Token (api_token in config.yaml). Zum Verbinden eingeben; es wird nur in diesem Browser gespeichert.",
+    "tokenLabel": "API-Token",
+    "placeholder": "Token einfügen …",
+    "save": "Speichern & neu laden",
+    "invalidStored": "Das gespeicherte Token wurde abgelehnt — bitte ein gültiges eingeben."
+  },
   "common": {
     "save": "Speichern",
     "cancel": "Abbrechen",
@@ -116,7 +124,16 @@
     "totalOut": "Gesamt raus",
     "totalIn": "Gesamt retour",
     "totalNet": "Netto",
-    "byItemTitle": "Nach Artikel"
+    "byItemTitle": "Nach Artikel",
+    "gaps": {
+      "title": "Datenlücken",
+      "count": "{{count}} Lücken",
+      "hint": "Im gewählten Zeitraum gab es Kamera-Ausfälle oder Drift-Alarme — die Zählungen können unvollständig sein.",
+      "from": "Von",
+      "to": "Bis",
+      "reason": "Grund",
+      "ongoing": "laufend"
+    }
   },
   "events": {
     "title": "Ereignisse",
@@ -161,7 +178,12 @@
     "totalPos": "POS gesamt",
     "totalCounted": "Gezählt (netto)",
     "empty": "Noch kein Abgleich durchgeführt.",
-    "emptyHint": "Laden Sie eine Kassen-CSV hoch, um Soll und Ist zu vergleichen."
+    "emptyHint": "Laden Sie eine Kassen-CSV hoch, um Soll und Ist zu vergleichen.",
+    "historyTitle": "Frühere Abgleiche",
+    "historyEmpty": "Noch keine gespeicherten Abgleiche.",
+    "historyEmptyHint": "Jeder Upload wird gespeichert und erscheint hier zur Nachvollziehbarkeit.",
+    "file": "Datei",
+    "view": "Anzeigen"
   },
   "admin": {
     "restaurants": {
@@ -291,6 +313,21 @@
     "snapshotsDir": "Snapshot-Verzeichnis",
     "loopFiles": "Dateiquellen loopen",
     "noPipelines": "Keine Pipelines gestartet.",
-    "noPipelinesHint": "Der Server läuft ohne Kamerapipelines (--no-pipeline) oder alle Kameras sind deaktiviert."
+    "noPipelinesHint": "Der Server läuft ohne Kamerapipelines (--no-pipeline) oder alle Kameras sind deaktiviert.",
+    "driftOk": "Bild OK",
+    "driftAlarm": "Drift!",
+    "driftNotCalibrated": "Nicht kalibriert",
+    "calibrate": "Kalibrieren",
+    "calibrateHint": "Aktuelles Kamerabild als Drift-Referenz speichern",
+    "calibrated": "Kalibrier-Referenz aktualisiert.",
+    "retentionTitle": "Snapshot-Aufbewahrung",
+    "retentionIntro": "Ereignis-Snapshots älter als {{days}} Tage löscht ein täglicher Job; hier bei Bedarf sofort ausführen.",
+    "retentionRun": "Bereinigung jetzt ausführen",
+    "retentionRunning": "Wird bereinigt …",
+    "retentionDone": "Bereinigung fertig: {{snapshots}} Snapshot(s) gelöscht, {{orphans}} verwaiste Datei(en) entfernt.",
+    "retentionDeleted": "Gelöschte Snapshots",
+    "retentionCleared": "Bereinigte Ereignis-Verweise",
+    "retentionOrphans": "Entfernte verwaiste Dateien",
+    "retentionRuns": "Läufe seit Start"
   }
 }

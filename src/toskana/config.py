@@ -34,6 +34,12 @@ class AppConfig(BaseSettings):
     active_restaurant_slug: str = "toskana"
     host: str = "127.0.0.1"
     port: int = 8420
+    # Optional bearer token protecting the API (env TOSKANA_API_TOKEN).
+    # None (default) = open LAN mode; set it before exposing the dashboard
+    # beyond a trusted network (see docs/deployment.md, Security).
+    api_token: str | None = None
+    # Optional webhook receiving JSON alerts (camera down / drift) via POST.
+    alert_webhook_url: str | None = None
     db_path: str = "./toskana.db"
     snapshots_dir: str = "./data/snapshots"
     snapshot_retention_days: int = 30

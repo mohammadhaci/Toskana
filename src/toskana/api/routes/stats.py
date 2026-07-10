@@ -6,12 +6,12 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from toskana.api import schemas
 from toskana.api.deps import SessionDep, restaurant_or_404
 from toskana.api.timeutils import bucket_start, epoch_ms, local_day_bounds, local_today
-from toskana.db.models import Category, Event, MenuItem
+from toskana.db.models import Category, DataGap, Event, MenuItem
 
 router = APIRouter(prefix="/restaurants/{restaurant_id}/stats", tags=["stats"])
 
@@ -156,6 +156,20 @@ def summary(restaurant_id: int, session: SessionDep) -> schemas.StatsSummary:
                 )
             )
 
+    # Data gaps overlapping the day flag its counts as potentially incomplete.
+    gaps_count = (
+        session.scalar(
+            select(func.count())
+            .select_from(DataGap)
+            .where(
+                DataGap.restaurant_id == restaurant_id,
+                DataGap.from_ts < day_to,
+                (DataGap.to_ts.is_(None)) | (DataGap.to_ts >= day_from),
+            )
+        )
+        or 0
+    )
+
     total_out = sum(row.out for row in rows)
     total_in = sum(row.in_ for row in rows)
     return schemas.StatsSummary(
@@ -168,4 +182,5 @@ def summary(restaurant_id: int, session: SessionDep) -> schemas.StatsSummary:
         total_out=total_out,
         total_in=total_in,
         total_net=total_out - total_in,
+        gaps_count=gaps_count,
     )

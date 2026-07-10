@@ -1,5 +1,6 @@
 /** Typed fetch wrapper for the Toskana REST API (same-origin `/api`). */
 
+import { authHeaders, notifyUnauthorized, withToken } from "./auth";
 import type {
   Camera,
   CameraCreate,
@@ -8,6 +9,7 @@ import type {
   Category,
   CategoryCreate,
   CategoryUpdate,
+  DataGapRecord,
   EventRecord,
   ExitGroup,
   ExitGroupCreate,
@@ -24,9 +26,11 @@ import type {
   ModelInfo,
   Page,
   ReconcileReport,
+  ReconcileRun,
   Restaurant,
   RestaurantCreate,
   RestaurantUpdate,
+  RetentionRunResult,
   StatsSummary,
   SystemHealth,
   SystemInfo,
@@ -60,8 +64,12 @@ export function toQueryString(params: Record<string, QueryValue>): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, init);
+  const response = await fetch(`/api${path}`, {
+    ...init,
+    headers: { ...authHeaders(), ...init?.headers },
+  });
   if (!response.ok) {
+    if (response.status === 401) notifyUnauthorized(); // server wants an API token
     let detail = response.statusText || `HTTP ${response.status}`;
     try {
       const body = (await response.json()) as { detail?: unknown };
@@ -90,6 +98,7 @@ export const api = {
   // -- system ---------------------------------------------------------------
   systemInfo: () => request<SystemInfo>("/system/info"),
   systemHealth: () => request<SystemHealth>("/system/health"),
+  runRetention: () => request<RetentionRunResult>("/system/retention/run", { method: "POST" }),
 
   // -- restaurants ------------------------------------------------------------
   listRestaurants: () => request<Page<Restaurant>>(`/restaurants${PAGE_ALL}`),
@@ -110,6 +119,8 @@ export const api = {
   startCamera: (id: number) => request<CameraStatus>(`/cameras/${id}/start`, { method: "POST" }),
   stopCamera: (id: number) => request<CameraStatus>(`/cameras/${id}/stop`, { method: "POST" }),
   restartCamera: (id: number) => request<CameraStatus>(`/cameras/${id}/restart`, { method: "POST" }),
+  calibrateCamera: (id: number) =>
+    request<CameraStatus>(`/cameras/${id}/calibrate`, { method: "POST" }),
 
   // -- lines ---------------------------------------------------------------------
   listLines: (cameraId: number) => request<Page<Line>>(`/cameras/${cameraId}/lines${PAGE_ALL}`),
@@ -171,6 +182,12 @@ export const api = {
       json({ is_canonical: isCanonical }, "PATCH"),
     ),
 
+  // -- data gaps -------------------------------------------------------------------------------
+  listDataGaps: (rid: number, params: { from_ts?: number; to_ts?: number; camera_id?: number }) =>
+    request<Page<DataGapRecord>>(
+      `/restaurants/${rid}/data-gaps${toQueryString({ limit: 100, ...params })}`,
+    ),
+
   // -- stats -----------------------------------------------------------------------------------
   timeseries: (
     rid: number,
@@ -187,13 +204,18 @@ export const api = {
       { method: "POST", body: form },
     );
   },
+  listReconcileRuns: (rid: number) =>
+    request<Page<ReconcileRun>>(`/restaurants/${rid}/reconcile-runs${PAGE_ALL}`),
 };
 
-/** URL helpers for media endpoints consumed by <img>/<a> directly. */
+/** URL helpers for media endpoints consumed by <img>/<a> directly.
+ * These cannot send headers, so a stored API token rides along as ?token=. */
 export const mediaUrl = {
-  stream: (cameraId: number) => `/api/stream/${cameraId}`,
+  stream: (cameraId: number) => withToken(`/api/stream/${cameraId}`),
   snapshot: (cameraId: number, cacheBust?: number) =>
-    `/api/snapshot/${cameraId}${cacheBust ? `?t=${cacheBust}` : ""}`,
-  eventSnapshot: (rid: number, eventId: string) => `/api/restaurants/${rid}/events/${eventId}/snapshot`,
-  eventsCsv: (rid: number, query: string) => `/api/restaurants/${rid}/events/export.csv${query}`,
+    withToken(`/api/snapshot/${cameraId}${cacheBust ? `?t=${cacheBust}` : ""}`),
+  eventSnapshot: (rid: number, eventId: string) =>
+    withToken(`/api/restaurants/${rid}/events/${eventId}/snapshot`),
+  eventsCsv: (rid: number, query: string) =>
+    withToken(`/api/restaurants/${rid}/events/export.csv${query}`),
 };

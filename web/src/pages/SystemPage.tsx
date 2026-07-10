@@ -1,13 +1,73 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 
+import { api } from "../api/client";
 import { useSystemHealth, useSystemInfo } from "../api/hooks";
+import type { CameraStatus, RetentionRunResult } from "../api/types";
+import { useToast } from "../components/Toast";
 import { Badge, Card, EmptyState, Skeleton } from "../components/ui";
 import { formatBytes, formatDateTime } from "../lib/format";
+
+function DriftBadge({ pipeline }: { pipeline: CameraStatus }) {
+  const { t } = useTranslation();
+  if (pipeline.drift_ok === null) {
+    return <Badge>{t("system.driftNotCalibrated")}</Badge>;
+  }
+  const score = pipeline.drift_score !== null ? ` (${pipeline.drift_score.toFixed(2)})` : "";
+  return pipeline.drift_ok ? (
+    <Badge tone="good">
+      {t("system.driftOk")}
+      {score}
+    </Badge>
+  ) : (
+    <Badge tone="bad">
+      {t("system.driftAlarm")}
+      {score}
+    </Badge>
+  );
+}
 
 export default function SystemPage() {
   const { t, i18n } = useTranslation();
   const { data: health, isLoading: healthLoading } = useSystemHealth();
   const { data: info, isLoading: infoLoading } = useSystemInfo();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [calibrating, setCalibrating] = useState<number | null>(null);
+  const [retentionBusy, setRetentionBusy] = useState(false);
+  const [retention, setRetention] = useState<RetentionRunResult | null>(null);
+
+  const calibrate = async (cameraId: number) => {
+    setCalibrating(cameraId);
+    try {
+      await api.calibrateCamera(cameraId);
+      toast.success(t("system.calibrated"));
+      void queryClient.invalidateQueries({ queryKey: ["system", "health"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCalibrating(null);
+    }
+  };
+
+  const runRetention = async () => {
+    setRetentionBusy(true);
+    try {
+      const result = await api.runRetention();
+      setRetention(result);
+      toast.success(
+        t("system.retentionDone", {
+          snapshots: result.deleted_snapshots,
+          orphans: result.orphans_removed,
+        }),
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRetentionBusy(false);
+    }
+  };
 
   return (
     <>
@@ -44,9 +104,12 @@ export default function SystemPage() {
             <div key={pipeline.camera_id} className="card" style={{ boxShadow: "none" }}>
               <div className="cam-head">
                 <h3>{pipeline.name ?? `#${pipeline.camera_id}`}</h3>
-                <Badge tone={pipeline.running ? "good" : "bad"}>
-                  {pipeline.running ? t("live.running") : t("live.stopped")}
-                </Badge>
+                <span className="btn-row">
+                  <DriftBadge pipeline={pipeline} />
+                  <Badge tone={pipeline.running ? "good" : "bad"}>
+                    {pipeline.running ? t("live.running") : t("live.stopped")}
+                  </Badge>
+                </span>
               </div>
               <dl className="kv">
                 <dt>{t("live.fps", { fps: "" }).trim()}</dt>
@@ -72,9 +135,46 @@ export default function SystemPage() {
                   </>
                 )}
               </dl>
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <button
+                  className="btn sm"
+                  disabled={calibrating === pipeline.camera_id}
+                  onClick={() => void calibrate(pipeline.camera_id)}
+                  title={t("system.calibrateHint")}
+                >
+                  {calibrating === pipeline.camera_id ? "…" : t("system.calibrate")}
+                </button>
+              </div>
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card
+        title={
+          <>
+            <span>{t("system.retentionTitle")}</span>
+            <button className="btn sm" disabled={retentionBusy} onClick={() => void runRetention()}>
+              {retentionBusy ? t("system.retentionRunning") : t("system.retentionRun")}
+            </button>
+          </>
+        }
+      >
+        <p style={{ marginTop: 0, color: "var(--ink-2)", fontSize: 13 }}>
+          {t("system.retentionIntro", { days: info?.snapshot_retention_days ?? "…" })}
+        </p>
+        {retention && (
+          <dl className="kv">
+            <dt>{t("system.retentionDeleted")}</dt>
+            <dd>{retention.deleted_snapshots}</dd>
+            <dt>{t("system.retentionCleared")}</dt>
+            <dd>{retention.cleared_events}</dd>
+            <dt>{t("system.retentionOrphans")}</dt>
+            <dd>{retention.orphans_removed}</dd>
+            <dt>{t("system.retentionRuns")}</dt>
+            <dd>{retention.runs}</dd>
+          </dl>
+        )}
       </Card>
 
       <Card title={t("system.infoTitle")}>

@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from toskana.api import schemas
 from toskana.api.deps import ConfigDep, PageDep, SessionDep, restaurant_or_404
-from toskana.db.models import Camera, Category, Event, MenuItem
+from toskana.db.models import Camera, Category, DataGap, Event, MenuItem
 
 router = APIRouter(tags=["events"])
 
@@ -198,6 +198,39 @@ def export_events_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="events.csv"'},
     )
+
+
+@router.get(
+    "/restaurants/{restaurant_id}/data-gaps", response_model=schemas.Page[schemas.DataGapRead]
+)
+def list_data_gaps(
+    restaurant_id: int,
+    session: SessionDep,
+    page: PageDep,
+    from_ts: int | None = None,
+    to_ts: int | None = None,
+    camera_id: int | None = None,
+) -> dict:
+    """Recorded no-data intervals (outages, start/stop and drift markers).
+
+    A gap overlaps the ``[from_ts, to_ts)`` window when it starts before the
+    window end and has not ended before the window start (open gaps count).
+    """
+    restaurant_or_404(session, restaurant_id)
+    stmt = select(DataGap).where(DataGap.restaurant_id == restaurant_id)
+    if from_ts is not None:
+        stmt = stmt.where((DataGap.to_ts.is_(None)) | (DataGap.to_ts >= from_ts))
+    if to_ts is not None:
+        stmt = stmt.where(DataGap.from_ts < to_ts)
+    if camera_id is not None:
+        stmt = stmt.where(DataGap.camera_id == camera_id)
+    total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = session.scalars(
+        stmt.order_by(DataGap.from_ts.desc(), DataGap.id.desc())
+        .limit(page.limit)
+        .offset(page.offset)
+    ).all()
+    return {"items": rows, "total": total, "limit": page.limit, "offset": page.offset}
 
 
 def _event_or_404(session: SessionDep, restaurant_id: int, event_id: str) -> Event:

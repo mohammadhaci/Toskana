@@ -411,6 +411,20 @@ class EventPatch(APIModel):
     is_canonical: bool
 
 
+# -- data gaps ---------------------------------------------------------------------------------
+
+
+class DataGapRead(ORMModel):
+    """A recorded no-data interval (outage / start / stop / drift marker)."""
+
+    id: int
+    restaurant_id: int
+    camera_id: int
+    from_ts: int
+    to_ts: int | None  # None = ongoing
+    reason: str
+
+
 # -- stats -------------------------------------------------------------------------------------
 
 
@@ -471,6 +485,8 @@ class StatsSummary(APIModel):
     total_out: int
     total_in: int
     total_net: int
+    #: Number of recorded data gaps overlapping the day (suspect-data flag).
+    gaps_count: int = 0
 
 
 # -- reconcile ------------------------------------------------------------------------------------
@@ -496,6 +512,21 @@ class ReconcileReport(APIModel):
     rows: list[ReconcileRow]
     total_pos_quantity: float
     total_counted_net: int
+    #: id of the persisted ``reconcile_runs`` row this report was stored as.
+    run_id: str | None = None
+
+
+class ReconcileRunRead(APIModel):
+    """One persisted reconciliation run (report history)."""
+
+    id: str
+    restaurant_id: int
+    date: str
+    uploaded_filename: str | None
+    rows: list[ReconcileRow]
+    total_pos_quantity: float
+    total_counted_net: int
+    created_ts: int
 
 
 # -- system ----------------------------------------------------------------------------------------

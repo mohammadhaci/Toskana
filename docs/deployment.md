@@ -17,6 +17,28 @@ cp config.example.yaml config.yaml       # edit db_path, snapshots_dir, cameras 
 Set `detector_backend: yolo` in `config.yaml` for production (the default
 `synthetic` backend is for CI/demo).
 
+## Security
+
+By default the dashboard/API is **open** — intended for a trusted LAN where the
+counter machine sits next to the POS. Before exposing it beyond that (guest
+Wi-Fi, VPN, port-forward, reverse proxy), set an API token:
+
+```yaml
+api_token: a-long-random-string        # or: TOSKANA_API_TOKEN=... in the unit file
+```
+
+With a token set, every `/api` route and `/ws/live` return 401 without
+`Authorization: Bearer <token>`; the MJPEG stream, snapshots, CSV export and the
+WebSocket also accept `?token=<token>` (browsers cannot set headers on `<img>`
+tags). Only `GET /api/system/health` stays open for monitoring probes. The
+dashboard prompts for the token on the first 401 and stores it in the browser's
+localStorage.
+
+The token protects the API, not the transport — for anything beyond the LAN put
+a TLS reverse proxy (Caddy, nginx) or VPN in front. Optionally set
+`alert_webhook_url` to receive `camera_down` / `drift` / `camera_recovered`
+JSON POSTs at an internal endpoint (5 s timeout, fire-and-forget).
+
 ## Linux service (systemd)
 
 `/etc/systemd/system/toskana.service`:
@@ -126,7 +148,8 @@ upward; a recent 6-core CPU handles 1–2 cameras at 15 FPS.
   daily in-process job; trigger manually with `POST /api/system/retention/run` or
   `toskana cleanup` (cron-friendly). See [privacy.md](privacy.md).
 - The System page shows DB size, per-camera FPS, gaps, drift status and dedup
-  statistics.
+  statistics, with per-camera **Calibrate** buttons (drift reference) and a
+  **Run retention cleanup** button.
 
 ## Contract/commercial checklist (templates, not code)
 

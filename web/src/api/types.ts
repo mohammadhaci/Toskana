@@ -98,6 +98,9 @@ export interface CameraStatus {
   source_type: string | null;
   started_ts: number | null;
   last_error: string | null;
+  /** M10 drift watchdog: null = not calibrated yet / camera never started. */
+  drift_ok: boolean | null;
+  drift_score: number | null;
 }
 
 // -- lines -----------------------------------------------------------------
@@ -289,6 +292,19 @@ export interface StatsSummary {
   total_out: number;
   total_in: number;
   total_net: number;
+  /** Data gaps overlapping the day: > 0 means today's counts may be incomplete. */
+  gaps_count: number;
+}
+
+// -- data gaps ------------------------------------------------------------------------
+
+export interface DataGapRecord {
+  id: number;
+  restaurant_id: number;
+  camera_id: number;
+  from_ts: number;
+  to_ts: number | null; // null = ongoing
+  reason: string;
 }
 
 // -- reconcile ------------------------------------------------------------------------
@@ -313,6 +329,19 @@ export interface ReconcileReport {
   rows: ReconcileRow[];
   total_pos_quantity: number;
   total_counted_net: number;
+  /** id of the persisted reconcile_runs row (report history). */
+  run_id: string | null;
+}
+
+export interface ReconcileRun {
+  id: string;
+  restaurant_id: number;
+  date: string;
+  uploaded_filename: string | null;
+  rows: ReconcileRow[];
+  total_pos_quantity: number;
+  total_counted_net: number;
+  created_ts: number;
 }
 
 // -- system --------------------------------------------------------------------------
@@ -341,6 +370,17 @@ export interface SystemInfo {
   device: string;
   loop_file_sources: boolean;
   snapshots_dir: string;
+  snapshot_retention_days: number;
+}
+
+export interface RetentionRunResult {
+  snapshot_retention_days: number;
+  cutoff_ms: number;
+  deleted_snapshots: number;
+  cleared_events: number;
+  orphans_removed: number;
+  removed_dirs: number;
+  runs: number;
 }
 
 // -- WS /ws/live message shapes ----------------------------------------------------------

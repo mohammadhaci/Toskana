@@ -10,6 +10,14 @@ active_restaurant_slug: toskana
 host: 127.0.0.1
 port: 8420
 
+# Optional API token. Unset (default) = open LAN mode. When set, every API
+# route except GET /api/system/health requires `Authorization: Bearer <token>`
+# (or ?token= for streams/WS) — set it before exposing beyond a trusted LAN.
+# api_token: change-me
+
+# Optional webhook: POSTs JSON alerts (camera_down / drift / camera_recovered).
+# alert_webhook_url: https://example.invalid/toskana-alerts
+
 # SQLite database file (WAL mode is enabled automatically).
 db_path: ./toskana.db
 

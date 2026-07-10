@@ -244,6 +244,39 @@ def compute_report(
     }
 
 
+#: Where a ``--min-score`` gate looks: the overall metrics, every per-hour
+#: bucket, or both (the default — a bad rush hour must not hide in the mean).
+MIN_SCORE_SCOPES = ("overall", "per-hour", "both")
+
+
+def min_score_failures(
+    report: Mapping[str, Any], min_score: float, scope: str = "both"
+) -> list[str]:
+    """Reasons a report fails the ``--min-score`` gate (empty = passes).
+
+    Precision and recall are checked; ``scope`` selects the buckets:
+    ``overall``, ``per-hour`` (every hour-of-day bucket) or ``both``.
+    """
+    if scope not in MIN_SCORE_SCOPES:
+        raise ValueError(f"min-score scope must be one of {MIN_SCORE_SCOPES}: {scope!r}")
+    failures: list[str] = []
+    if scope in ("overall", "both"):
+        overall = report["overall"]
+        failures.extend(
+            f"overall {metric} {overall[metric]:.4f}"
+            for metric in ("precision", "recall")
+            if overall[metric] < min_score
+        )
+    if scope in ("per-hour", "both"):
+        for hour, row in report["per_hour"].items():
+            failures.extend(
+                f"hour {hour} {metric} {row[metric]:.4f}"
+                for metric in ("precision", "recall")
+                if row[metric] < min_score
+            )
+    return failures
+
+
 def counts_by_category(
     crossings: Sequence[GTCrossing] | Sequence[MeasuredCrossing],
 ) -> dict[str, dict[str, int]]:

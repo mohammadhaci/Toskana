@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import AuthPrompt from "./components/AuthPrompt";
 import Layout from "./components/Layout";
 import { EmptyState } from "./components/ui";
 import LivePage from "./pages/LivePage";
@@ -23,23 +24,26 @@ function NotFound() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<Navigate to="/live" replace />} />
-        <Route path="/live" element={<LivePage />} />
-        <Route path="/stats" element={<StatsPage />} />
-        <Route path="/events" element={<EventsPage />} />
-        <Route path="/reconcile" element={<ReconcilePage />} />
-        <Route path="/system" element={<SystemPage />} />
-        <Route path="/admin/restaurants" element={<RestaurantsPage />} />
-        <Route path="/admin/cameras" element={<CamerasPage />} />
-        <Route path="/admin/cameras/:id/lines" element={<LineEditorPage />} />
-        <Route path="/admin/exit-groups" element={<ExitGroupsPage />} />
-        <Route path="/admin/menu" element={<MenuPage />} />
-        <Route path="/admin/mappings" element={<MappingsPage />} />
-        <Route path="/admin/models" element={<ModelsPage />} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
+    <>
+      <AuthPrompt />
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Navigate to="/live" replace />} />
+          <Route path="/live" element={<LivePage />} />
+          <Route path="/stats" element={<StatsPage />} />
+          <Route path="/events" element={<EventsPage />} />
+          <Route path="/reconcile" element={<ReconcilePage />} />
+          <Route path="/system" element={<SystemPage />} />
+          <Route path="/admin/restaurants" element={<RestaurantsPage />} />
+          <Route path="/admin/cameras" element={<CamerasPage />} />
+          <Route path="/admin/cameras/:id/lines" element={<LineEditorPage />} />
+          <Route path="/admin/exit-groups" element={<ExitGroupsPage />} />
+          <Route path="/admin/menu" element={<MenuPage />} />
+          <Route path="/admin/mappings" element={<MappingsPage />} />
+          <Route path="/admin/models" element={<ModelsPage />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    </>
   );
 }

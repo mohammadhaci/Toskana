@@ -39,6 +39,7 @@ EXPECTED_TABLES = {
     "sessions",
     "data_gaps",
     "counting_eval_runs",
+    "reconcile_runs",
 }
 
 

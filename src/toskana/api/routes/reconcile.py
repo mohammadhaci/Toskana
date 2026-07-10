@@ -1,25 +1,29 @@
 """POS reconciliation: upload a cashier CSV, compare against counted events.
 
-Stateless v1: the report is computed and returned, nothing is persisted.
 CSV columns: ``category_key,quantity[,date]`` (date ``YYYY-MM-DD``, local to
 the restaurant; rows without a date use the ``date`` query param, defaulting
-to today).
+to today). Every report is persisted as a ``reconcile_runs`` row (ULID id,
+uploaded filename, row payload, totals) and listed via
+``GET /restaurants/{id}/reconcile-runs`` for audit history.
 """
 
 from __future__ import annotations
 
 import csv
 import io
+import json
+import time
 from datetime import date as date_type
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from toskana.api import schemas
-from toskana.api.deps import SessionDep, restaurant_or_404
+from toskana.api.deps import PageDep, SessionDep, restaurant_or_404
 from toskana.api.timeutils import local_day_bounds, local_today
-from toskana.db.models import Category, Event
+from toskana.db.models import Category, Event, ReconcileRun
+from toskana.events.writer import new_event_id
 
 router = APIRouter(tags=["reconcile"])
 
@@ -113,6 +117,19 @@ def reconcile(
         total_pos += quantity
         total_net += counted_net
 
+    run = ReconcileRun(
+        id=new_event_id(),  # ULID: unique + creation-ordered
+        restaurant_id=restaurant_id,
+        date=default_day.isoformat(),
+        uploaded_filename=file.filename,
+        rows_json=json.dumps([row.model_dump() for row in rows], sort_keys=True),
+        total_pos_quantity=total_pos,
+        total_counted_net=total_net,
+        created_ts=int(time.time() * 1000),
+    )
+    session.add(run)
+    session.commit()
+
     return schemas.ReconcileReport(
         restaurant_id=restaurant_id,
         default_date=default_day.isoformat(),
@@ -120,4 +137,35 @@ def reconcile(
         rows=rows,
         total_pos_quantity=total_pos,
         total_counted_net=total_net,
+        run_id=run.id,
     )
+
+
+@router.get(
+    "/restaurants/{restaurant_id}/reconcile-runs",
+    response_model=schemas.Page[schemas.ReconcileRunRead],
+)
+def list_reconcile_runs(restaurant_id: int, session: SessionDep, page: PageDep) -> dict:
+    """Persisted reconciliation reports, newest first."""
+    restaurant_or_404(session, restaurant_id)
+    base = select(ReconcileRun).where(ReconcileRun.restaurant_id == restaurant_id)
+    total = session.scalar(select(func.count()).select_from(base.subquery())) or 0
+    runs = session.scalars(
+        base.order_by(ReconcileRun.created_ts.desc(), ReconcileRun.id.desc())
+        .limit(page.limit)
+        .offset(page.offset)
+    ).all()
+    items = [
+        schemas.ReconcileRunRead(
+            id=run.id,
+            restaurant_id=run.restaurant_id,
+            date=run.date,
+            uploaded_filename=run.uploaded_filename,
+            rows=[schemas.ReconcileRow(**row) for row in json.loads(run.rows_json)],
+            total_pos_quantity=run.total_pos_quantity,
+            total_counted_net=run.total_counted_net,
+            created_ts=run.created_ts,
+        )
+        for run in runs
+    ]
+    return {"items": items, "total": total, "limit": page.limit, "offset": page.offset}

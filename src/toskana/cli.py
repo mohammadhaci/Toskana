@@ -331,7 +331,6 @@ def cmd_eval_counting(config: AppConfig, args: argparse.Namespace) -> int:
         )
         run_id = record.run_id
 
-    overall = outcome.report["overall"]
     if args.json:
         print(
             json.dumps(
@@ -347,15 +346,17 @@ def cmd_eval_counting(config: AppConfig, args: argparse.Namespace) -> int:
         )
     else:
         _print_eval_report(outcome, run_id=run_id, db=args.db)
-    if args.min_score is not None and (
-        overall["precision"] < args.min_score or overall["recall"] < args.min_score
-    ):
-        print(
-            f"FAIL: precision {overall['precision']:.4f} / recall {overall['recall']:.4f} "
-            f"below --min-score {args.min_score}",
-            file=sys.stderr,
-        )
-        return 1
+    if args.min_score is not None:
+        from toskana.eval.counting import min_score_failures
+
+        failures = min_score_failures(outcome.report, args.min_score, args.min_score_scope)
+        if failures:
+            print(
+                f"FAIL: below --min-score {args.min_score} "
+                f"(scope {args.min_score_scope}): {'; '.join(failures)}",
+                file=sys.stderr,
+            )
+            return 1
     return 0
 
 
@@ -523,7 +524,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--min-score",
         type=float,
         default=None,
-        help="Exit non-zero when overall precision or recall falls below this (e.g. 0.9)",
+        help="Exit non-zero when precision or recall falls below this (e.g. 0.9)",
+    )
+    evaluate.add_argument(
+        "--min-score-scope",
+        choices=["overall", "per-hour", "both"],
+        default="both",
+        help="Buckets --min-score gates: overall metrics, every per-hour bucket, "
+        "or both (default: both)",
     )
     evaluate.add_argument("--json", action="store_true", help="Print the full report as JSON")
     sub.add_parser("cleanup", help="Run the snapshot retention pass once (cron/manual)")

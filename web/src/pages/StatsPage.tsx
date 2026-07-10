@@ -16,11 +16,18 @@ import {
   YAxis,
 } from "recharts";
 
-import { useActiveRestaurantId, useCameras, useCategories, useMenuItems, useTimeseries } from "../api/hooks";
+import {
+  useActiveRestaurantId,
+  useCameras,
+  useCategories,
+  useDataGaps,
+  useMenuItems,
+  useTimeseries,
+} from "../api/hooks";
 import type { Bucket } from "../api/types";
-import { Card, ColorChip, EmptyState, Skeleton } from "../components/ui";
+import { Badge, Card, ColorChip, EmptyState, Skeleton } from "../components/ui";
 import { localInputToMs, msToLocalInput } from "../lib/eventFilters";
-import { categoryLabel } from "../lib/format";
+import { categoryLabel, formatDateTime } from "../lib/format";
 import {
   grandTotals,
   isUngrouped,
@@ -57,6 +64,7 @@ export default function StatsPage() {
   const byCategory = useTimeseries(rid, { bucket, ...range, group_by: "category" });
   const byCamera = useTimeseries(rid, { bucket, ...range, group_by: "camera" });
   const byItem = useTimeseries(rid, { bucket, ...range, group_by: "menu_item" });
+  const { data: gaps } = useDataGaps(rid, range);
   const { data: categories } = useCategories(rid);
   const { data: cameras } = useCameras(rid);
   const { data: menuItems } = useMenuItems(rid);
@@ -171,6 +179,43 @@ export default function StatsPage() {
           <span className="tile-value">{totals.net}</span>
         </div>
       </div>
+
+      {gaps && gaps.total > 0 && (
+        <Card
+          title={
+            <>
+              <span>⚠️ {t("stats.gaps.title")}</span>
+              <Badge tone="warn">{t("stats.gaps.count", { count: gaps.total })}</Badge>
+            </>
+          }
+        >
+          <p style={{ marginTop: 0, color: "var(--ink-2)", fontSize: 13 }}>{t("stats.gaps.hint")}</p>
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>{t("stats.gaps.from")}</th>
+                  <th>{t("stats.gaps.to")}</th>
+                  <th>{t("common.camera")}</th>
+                  <th>{t("stats.gaps.reason")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gaps.items.map((gap) => (
+                  <tr key={gap.id}>
+                    <td style={{ whiteSpace: "nowrap" }}>{formatDateTime(gap.from_ts, i18n.language)}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {gap.to_ts === null ? t("stats.gaps.ongoing") : formatDateTime(gap.to_ts, i18n.language)}
+                    </td>
+                    <td>{cameraName(String(gap.camera_id))}</td>
+                    <td>{gap.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {loading && (
         <Card>

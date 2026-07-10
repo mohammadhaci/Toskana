@@ -19,7 +19,13 @@ from tests.tools.make_synthetic_video import generate_scenario
 from toskana.cli import main as cli_main
 from toskana.db.base import make_engine, make_session_factory
 from toskana.db.models import CountingEvalRun
-from toskana.eval.counting import GTCrossing, MeasuredCrossing, compute_report, match_crossings
+from toskana.eval.counting import (
+    GTCrossing,
+    MeasuredCrossing,
+    compute_report,
+    match_crossings,
+    min_score_failures,
+)
 from toskana.eval.runner import evaluate_videos
 from toskana.vision.line_crossing import LineSpec
 
@@ -96,6 +102,49 @@ class TestMetricsCatchErrors:
         assert not match_crossings(gt, [MeasuredCrossing("drink", "negative", 0)]).pairs
 
 
+class TestMinScoreScope:
+    """A perfect average must not hide a bad hour: scope 'both' (default)
+    also gates every per-hour bucket."""
+
+    #: Hour 10 is perfect (1 TP); hour 12 is all misses (1 FN + 1 FP).
+    GT = [
+        GTCrossing("drink", "positive", 10 * 3_600_000),
+        GTCrossing("drink", "positive", 12 * 3_600_000),
+    ]
+    MEASURED = [
+        MeasuredCrossing("drink", "positive", 10 * 3_600_000 + 500),
+        MeasuredCrossing("drink", "positive", 12 * 3_600_000 + 60_000),  # outside tolerance
+    ]
+
+    def test_overall_scope_misses_the_bad_hour(self) -> None:
+        report = compute_report(self.GT, self.MEASURED)
+        # Overall precision/recall are 0.5 — a 0.4 gate passes on average …
+        assert min_score_failures(report, 0.4, "overall") == []
+        # … but the per-hour and default 'both' scopes catch hour 12.
+        per_hour = min_score_failures(report, 0.4, "per-hour")
+        assert per_hour == ["hour 12 precision 0.0000", "hour 12 recall 0.0000"]
+        assert min_score_failures(report, 0.4, "both") == per_hour
+
+    def test_both_scope_reports_overall_and_hours(self) -> None:
+        report = compute_report(self.GT, self.MEASURED)
+        failures = min_score_failures(report, 0.9, "both")
+        assert "overall precision 0.5000" in failures
+        assert "overall recall 0.5000" in failures
+        assert "hour 12 precision 0.0000" in failures
+        assert "hour 10 precision 1.0000" not in " ".join(failures)
+
+    def test_perfect_report_passes_every_scope(self) -> None:
+        gt = [GTCrossing("drink", "positive", 1_000)]
+        report = compute_report(gt, [MeasuredCrossing("drink", "positive", 1_200)])
+        for scope in ("overall", "per-hour", "both"):
+            assert min_score_failures(report, 1.0, scope) == []
+
+    def test_unknown_scope_raises(self) -> None:
+        report = compute_report([], [])
+        with pytest.raises(ValueError, match="scope"):
+            min_score_failures(report, 0.9, "per-category")
+
+
 class TestEvalCountingCli:
     def test_json_report_and_recorded_run(self, tmp_path: Path, capsys) -> None:
         generated = generate_scenario("tray_carry_3", tmp_path)
@@ -152,3 +201,24 @@ class TestEvalCountingCli:
         captured = capsys.readouterr()
         assert json.loads(captured.out)["overall"]["recall"] == 0.0
         assert "below --min-score" in captured.err
+        assert "scope both" in captured.err  # default scope
+
+    def test_min_score_scope_flag_is_wired(self, tmp_path: Path, capsys) -> None:
+        """--min-score-scope reaches the gate (perfect run passes 'per-hour')."""
+        generated = generate_scenario("single_drink", tmp_path)
+        exit_code = cli_main(
+            [
+                "eval-counting",
+                "--video",
+                str(generated.video_paths["cam"]),
+                "--gt",
+                str(generated.ground_truth_path),
+                "--min-score",
+                "1.0",
+                "--min-score-scope",
+                "per-hour",
+                "--json",
+            ]
+        )
+        assert exit_code == 0
+        assert json.loads(capsys.readouterr().out)["overall"]["recall"] == 1.0

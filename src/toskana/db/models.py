@@ -370,6 +370,27 @@ class DataGap(Base):
     __table_args__ = (Index("ix_data_gaps_camera_from_ts", "camera_id", "from_ts"),)
 
 
+class ReconcileRun(Base):
+    """A persisted POS reconciliation report (upload + computed variances)."""
+
+    __tablename__ = "reconcile_runs"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)  # ULID (creation-ordered)
+    restaurant_id: Mapped[int] = mapped_column(
+        ForeignKey("restaurants.id", ondelete="CASCADE"), index=True
+    )
+    date: Mapped[str] = mapped_column(String(10))  # default local date (YYYY-MM-DD)
+    uploaded_filename: Mapped[str | None] = mapped_column(String(255), default=None)
+    rows_json: Mapped[str] = mapped_column(Text)  # JSON list of ReconcileRow dicts
+    total_pos_quantity: Mapped[float] = mapped_column(Float)
+    total_counted_net: Mapped[int] = mapped_column(Integer)
+    created_ts: Mapped[int] = mapped_column(Integer)  # UTC epoch ms
+
+    restaurant: Mapped[Restaurant] = relationship()
+
+    __table_args__ = (Index("ix_reconcile_runs_restaurant_created", "restaurant_id", "created_ts"),)
+
+
 class CountingEvalRun(Base):
     """Result of an evaluation campaign against ground truth."""
 
