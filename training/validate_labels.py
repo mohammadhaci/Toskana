@@ -45,8 +45,11 @@ def load_classes(labels_dir: Path, requested: str | None) -> list[str] | None:
         return [name.strip() for name in requested.split(",") if name.strip()]
     classes_file = labels_dir / "classes.txt"
     if classes_file.is_file():
-        return [line.strip() for line in classes_file.read_text(encoding="utf-8").splitlines()
-                if line.strip()]
+        return [
+            line.strip()
+            for line in classes_file.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
     return None
 
 
@@ -105,9 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     classes = load_classes(labels_dir, args.classes)
     num_classes = len(classes) if classes else None
     label_files = sorted(
-        p
-        for p in labels_dir.rglob("*.txt")
-        if p.name not in SPECIAL_FILES and p.is_file()
+        p for p in labels_dir.rglob("*.txt") if p.name not in SPECIAL_FILES and p.is_file()
     )
     if not label_files:
         print(f"validate_labels: no label files under {labels_dir}", file=sys.stderr)

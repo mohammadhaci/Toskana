@@ -30,9 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--weights", required=True, help="trained weights (best.pt)")
     parser.add_argument("--data", required=True, help="dataset data.yaml")
     parser.add_argument("--imgsz", type=int, default=640)
-    parser.add_argument(
-        "--device", default="auto", help="auto | cpu | cuda | mps (default: auto)"
-    )
+    parser.add_argument("--device", default="auto", help="auto | cpu | cuda | mps (default: auto)")
     parser.add_argument(
         "--min-map50",
         type=float,
