@@ -933,3 +933,51 @@ table.data tfoot td {
   align-items: flex-start;
   gap: 12px;
 }
+
+/* -- live camera lightbox ---------------------------------------------------- */
+
+.cam-frame-clickable {
+  cursor: zoom-in;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(12, 11, 10, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s5);
+  cursor: zoom-out;
+}
+
+.lightbox-inner {
+  cursor: default;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: var(--s4);
+  max-width: min(1400px, 96vw);
+  width: 100%;
+}
+
+.lightbox-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s3);
+}
+
+.lightbox-head h3 {
+  margin: 0;
+}
+
+.lightbox-stream {
+  display: block;
+  width: 100%;
+  max-height: 82vh;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: #000;
+}

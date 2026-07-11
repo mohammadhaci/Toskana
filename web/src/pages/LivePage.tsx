@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { mediaUrl } from "../api/client";
@@ -8,7 +8,7 @@ import type { Camera, LiveCounter } from "../api/types";
 import { Badge, Card, ColorChip, EmptyState, Skeleton } from "../components/ui";
 import { categoryLabel, formatTime } from "../lib/format";
 
-function CameraCard({ camera }: { camera: Camera }) {
+function CameraCard({ camera, onExpand }: { camera: Camera; onExpand: (camera: Camera) => void }) {
   const { t } = useTranslation();
   const { data: status } = useCameraStatus(camera.id);
   const [streamFailed, setStreamFailed] = useState(false);
@@ -17,6 +17,7 @@ function CameraCard({ camera }: { camera: Camera }) {
 
   const showStream = running && !streamFailed;
   const showSnapshot = !showStream && !snapshotFailed;
+  const expandable = showStream || showSnapshot;
 
   return (
     <Card>
@@ -27,9 +28,32 @@ function CameraCard({ camera }: { camera: Camera }) {
             <Badge>{t("live.fps", { fps: status.fps.toFixed(1) })}</Badge>
           )}
           <Badge tone={running ? "good" : "bad"}>{running ? t("live.running") : t("live.stopped")}</Badge>
+          {expandable && (
+            <button
+              className="btn sm"
+              title={t("live.expand")}
+              aria-label={t("live.expand")}
+              onClick={() => onExpand(camera)}
+            >
+              ⛶
+            </button>
+          )}
         </span>
       </div>
-      <div className="cam-frame">
+      <div
+        className={`cam-frame ${expandable ? "cam-frame-clickable" : ""}`}
+        role={expandable ? "button" : undefined}
+        tabIndex={expandable ? 0 : undefined}
+        title={expandable ? t("live.expand") : undefined}
+        onClick={expandable ? () => onExpand(camera) : undefined}
+        onKeyDown={
+          expandable
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") onExpand(camera);
+              }
+            : undefined
+        }
+      >
         {showStream && (
           <img src={mediaUrl.stream(camera.id)} alt={camera.name} onError={() => setStreamFailed(true)} />
         )}
@@ -46,6 +70,60 @@ function CameraCard({ camera }: { camera: Camera }) {
         {!showStream && !showSnapshot && <div className="cam-offline">{t("live.streamUnavailable")}</div>}
       </div>
     </Card>
+  );
+}
+
+function CameraLightbox({ camera, onClose }: { camera: Camera; onClose: () => void }) {
+  const { t } = useTranslation();
+  const { data: status } = useCameraStatus(camera.id);
+  const [streamFailed, setStreamFailed] = useState(false);
+  const running = status?.running ?? false;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  return (
+    <div className="lightbox" role="dialog" aria-modal="true" aria-label={camera.name} onClick={onClose}>
+      <div className="lightbox-inner" onClick={(e) => e.stopPropagation()}>
+        <div className="lightbox-head">
+          <h3>{camera.name}</h3>
+          <span className="btn-row">
+            {status && running && status.fps > 0 && (
+              <Badge>{t("live.fps", { fps: status.fps.toFixed(1) })}</Badge>
+            )}
+            <Badge tone={running ? "good" : "bad"}>
+              {running ? t("live.running") : t("live.stopped")}
+            </Badge>
+            <button className="btn sm" aria-label={t("live.close")} onClick={onClose}>
+              ✕ {t("live.close")}
+            </button>
+          </span>
+        </div>
+        {running && !streamFailed ? (
+          <img
+            className="lightbox-stream"
+            src={mediaUrl.stream(camera.id)}
+            alt={camera.name}
+            onError={() => setStreamFailed(true)}
+          />
+        ) : (
+          <img
+            className="lightbox-stream"
+            src={mediaUrl.snapshot(camera.id, Date.now())}
+            alt={camera.name}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -116,6 +194,7 @@ export default function LivePage() {
   const { isLoading: infoLoading } = useSystemInfo();
   const { data: cameras, isLoading } = useCameras(rid);
   const live = useLiveSocket();
+  const [expanded, setExpanded] = useState<Camera | null>(null);
 
   const counterByCategory = useMemo(() => {
     const map = new Map<number | null, LiveCounter>();
@@ -148,7 +227,9 @@ export default function LivePage() {
             </Card>
           )}
           <div className="grid grid-cameras">
-            {cameras?.items.map((camera) => <CameraCard key={camera.id} camera={camera} />)}
+            {cameras?.items.map((camera) => (
+              <CameraCard key={camera.id} camera={camera} onExpand={setExpanded} />
+            ))}
           </div>
         </div>
 
@@ -183,6 +264,8 @@ export default function LivePage() {
           )}
         </Card>
       </div>
+
+      {expanded && <CameraLightbox camera={expanded} onClose={() => setExpanded(null)} />}
     </>
   );
 }

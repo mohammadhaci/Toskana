@@ -94,7 +94,9 @@
     "fps": "{{fps}} FPS",
     "noCounters": "Noch keine Zählungen heute.",
     "gap": "Datenlücke: Kamera {{camera}} ({{reason}})",
-    "wsReconnecting": "Live-Verbindung getrennt — Wiederaufbau läuft …"
+    "wsReconnecting": "Live-Verbindung getrennt — Wiederaufbau läuft …",
+    "expand": "Vergrößern",
+    "close": "Schließen"
   },
   "stats": {
     "title": "Statistiken",

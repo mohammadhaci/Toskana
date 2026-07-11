@@ -94,7 +94,9 @@
     "fps": "{{fps}} FPS",
     "noCounters": "No counts yet today.",
     "gap": "Data gap: camera {{camera}} ({{reason}})",
-    "wsReconnecting": "Live connection lost — reconnecting …"
+    "wsReconnecting": "Live connection lost — reconnecting …",
+    "expand": "Expand",
+    "close": "Close"
   },
   "stats": {
     "title": "Statistics",
