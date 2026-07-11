@@ -13,35 +13,10 @@ from toskana import __version__
 from toskana.config import AppConfig, load_config
 
 
-def _repo_root() -> Path:
-    """Locate the directory containing alembic.ini (editable install / checkout)."""
-    candidates = [
-        Path(__file__).resolve().parents[2],  # <root>/src/toskana/cli.py -> <root>
-        Path.cwd(),
-    ]
-    for candidate in candidates:
-        if (candidate / "alembic.ini").is_file():
-            return candidate
-    raise FileNotFoundError("alembic.ini not found; run from the Toskana checkout or set cwd to it")
-
-
-def _alembic_upgrade_head(config: AppConfig) -> None:
-    from alembic.config import Config as AlembicConfig
-
-    from alembic import command
-
-    root = _repo_root()
-    alembic_cfg = AlembicConfig(str(root / "alembic.ini"))
-    alembic_cfg.set_main_option("script_location", str(root / "alembic"))
-    alembic_cfg.set_main_option("sqlalchemy.url", config.db_url)
-    command.upgrade(alembic_cfg, "head")
-
-
 def cmd_init_db(config: AppConfig, args: argparse.Namespace) -> int:
-    db_path = Path(config.db_path)
-    if db_path.parent and not db_path.parent.exists():
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-    _alembic_upgrade_head(config)
+    from toskana.db.migrate import upgrade_to_head
+
+    upgrade_to_head(config)
     print(f"Database ready at {config.db_path} (alembic head)")
     return 0
 

@@ -50,6 +50,7 @@ from toskana.api.auth import TokenAuthMiddleware
 from toskana.api.routes import api_router
 from toskana.api.ws import LiveBroadcaster
 from toskana.config import AppConfig
+from toskana.db.migrate import upgrade_to_head
 from toskana.events.bus import EventBus
 from toskana.events.writer import EventWriter, make_writer_session_factory
 from toskana.refiner_engine import RefinerEngine
@@ -107,6 +108,14 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # Bring the schema up to date before anything opens a connection: a
+        # `git pull` that adds a column/table then a plain `toskana run` just
+        # works, instead of failing later with a raw "no such column" error.
+        # Non-fatal: a clear log line beats a crash if migration can't run.
+        try:
+            await asyncio.to_thread(upgrade_to_head, config)
+        except Exception:
+            logger.exception("database auto-migration failed; run `toskana init-db` manually")
         # NullPool + check_same_thread=False: safe for FastAPI's threadpool,
         # the manager's pipeline threads and the writer thread alike.
         session_factory = make_writer_session_factory(config.db_path)
