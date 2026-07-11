@@ -229,9 +229,12 @@ def seed(session: Session) -> Restaurant:
                 exit_group_id=exit_group.id,
                 is_primary_in_group=bool(spec["primary"]),
                 target_fps=15,
+                detector_backend="synthetic",  # demo clips use the color detector
             )
             session.add(cam)
             session.flush()
+        if cam.detector_backend is None:
+            cam.detector_backend = "synthetic"  # heal pre-existing demo rows
         cameras.append(cam)
 
     line_coords = [

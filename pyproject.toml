@@ -21,6 +21,8 @@ dependencies = [
     "python-ulid",
     "pillow",
     "python-multipart",
+    "httpx",
+    "tzdata",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +30,7 @@ ml = [
     "torch",
     "torchvision",
     "ultralytics",
+    "yt-dlp",
 ]
 train = [
     "yt-dlp",

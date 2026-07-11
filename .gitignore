@@ -5,6 +5,7 @@ __pycache__/
 .eggs/
 build/
 dist/
+!web/dist/
 .venv/
 venv/
 .mypy_cache/
@@ -27,7 +28,6 @@ models/*
 
 # Node / frontend
 node_modules/
-web/dist/
 web/node_modules/
 
 # Misc

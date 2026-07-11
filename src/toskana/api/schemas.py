@@ -1,0 +1,741 @@
+"""Pydantic v2 request/response models for the REST API.
+
+Conventions:
+
+* ``*Create`` — POST body (required fields, sensible defaults).
+* ``*Update`` — PUT/PATCH body: every field optional; only fields the client
+  sent (``exclude_unset``) are applied.
+* ``*Read`` — response model, built from ORM rows (``from_attributes=True``).
+* ``Page[...]`` — standard paginated list envelope.
+
+Timestamps are integer Unix epoch **milliseconds, UTC** everywhere, matching
+the database schema.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated, Any, Generic, Literal, TypeVar
+from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+T = TypeVar("T")
+
+NormCoord = Annotated[float, Field(ge=0.0, le=1.0)]
+Direction = Literal["out", "in"]
+
+
+class APIModel(BaseModel):
+    """Base for request/response bodies (frees the ``model_*`` field names)."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+
+class ORMModel(APIModel):
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
+
+class Page(APIModel, Generic[T]):
+    """Paginated list envelope."""
+
+    items: list[T]
+    total: int
+    limit: int
+    offset: int
+
+
+# -- restaurants ----------------------------------------------------------
+
+
+def _validate_timezone(value: str) -> str:
+    try:
+        ZoneInfo(value)
+    except Exception as exc:
+        raise ValueError(f"unknown IANA timezone: {value!r}") from exc
+    return value
+
+
+class RestaurantCreate(APIModel):
+    slug: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9\-_]*$")
+    name: str = Field(min_length=1, max_length=200)
+    timezone: str = "Europe/Vienna"
+    locale_default: str = "de"
+    settings_json: str | None = None
+
+    _tz = field_validator("timezone")(_validate_timezone)
+
+
+class RestaurantUpdate(APIModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    timezone: str | None = None
+    locale_default: str | None = None
+    settings_json: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def _tz(cls, value: str | None) -> str | None:
+        return None if value is None else _validate_timezone(value)
+
+
+class RestaurantRead(ORMModel):
+    id: int
+    slug: str
+    name: str
+    timezone: str
+    locale_default: str
+    settings_json: str | None
+
+
+# -- exit groups ------------------------------------------------------------
+
+
+class ExitGroupCreate(APIModel):
+    name: str = Field(min_length=1, max_length=200)
+    dedup_window_ms: int = Field(default=2000, ge=0, le=60_000)
+    dedup_strategy: Literal["primary_wins", "first_wins"] = "primary_wins"
+
+
+class ExitGroupUpdate(APIModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    dedup_window_ms: int | None = Field(default=None, ge=0, le=60_000)
+    dedup_strategy: Literal["primary_wins", "first_wins"] | None = None
+
+
+class ExitGroupRead(ORMModel):
+    id: int
+    restaurant_id: int
+    name: str
+    dedup_window_ms: int
+    dedup_strategy: str
+
+
+# -- cameras ------------------------------------------------------------------
+
+
+class CameraCreate(APIModel):
+    name: str = Field(min_length=1, max_length=200)
+    source_type: Literal["rtsp", "usb", "file"]
+    source_url: str = Field(min_length=1, max_length=1000)
+    exit_group_id: int | None = None
+    is_primary_in_group: bool = False
+    target_fps: int = Field(default=15, ge=1, le=120)
+    model_id: int | None = None
+    detector_backend: Literal["synthetic", "yolo"] | None = None
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def _usb_source_is_index(self) -> CameraCreate:
+        if self.source_type == "usb" and not self.source_url.strip().isdigit():
+            raise ValueError("usb source_url must be a numeric device index")
+        return self
+
+
+class CameraUpdate(APIModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    source_type: Literal["rtsp", "usb", "file"] | None = None
+    source_url: str | None = Field(default=None, min_length=1, max_length=1000)
+    exit_group_id: int | None = None
+    is_primary_in_group: bool | None = None
+    target_fps: int | None = Field(default=None, ge=1, le=120)
+    model_id: int | None = None
+    detector_backend: Literal["synthetic", "yolo"] | None = None
+    enabled: bool | None = None
+
+
+class CameraRead(ORMModel):
+    id: int
+    restaurant_id: int
+    name: str
+    source_type: str
+    source_url: str
+    exit_group_id: int | None
+    is_primary_in_group: bool
+    target_fps: int
+    model_id: int | None
+    detector_backend: str | None
+    enabled: bool
+
+
+class CameraPresetRead(APIModel):
+    """One vendor entry for the wizard dropdown (GET /camera-presets)."""
+
+    key: str
+    label: str
+    default_port: int
+    needs_channel: bool
+    #: Template with {user}/{password}/{ip}/{port}/{channel} placeholders;
+    #: None for the generic (manual URL) preset. The client renders a
+    #: masked preview from it; the real URL is built server-side.
+    url_template: str | None
+
+
+class CameraTestSource(APIModel):
+    """Body of POST .../cameras/test-source.
+
+    Two mutually supporting shapes: a raw source (``source_type`` +
+    ``source_url``) or vendor-preset fields (``preset_key`` + ``ip`` + …).
+    Preset fields keep the password out of any browser-built URL: the
+    server builds and probes the URL and only echoes a masked form.
+    """
+
+    source_type: Literal["rtsp", "usb", "file"] | None = None
+    source_url: str | None = Field(default=None, max_length=1000)
+    preset_key: str | None = None
+    ip: str | None = Field(default=None, max_length=253)
+    username: str = Field(default="", max_length=128)
+    password: str = Field(default="", max_length=128)
+    port: int | None = Field(default=None, ge=1, le=65535)
+    channel: int = Field(default=1, ge=1, le=64)
+
+    @model_validator(mode="after")
+    def _one_shape(self) -> CameraTestSource:
+        raw = self.source_type is not None and bool(self.source_url and self.source_url.strip())
+        preset = self.preset_key is not None
+        if not raw and not preset:
+            raise ValueError("provide source_type+source_url or preset_key+ip")
+        if self.source_type == "usb" and not str(self.source_url).strip().isdigit():
+            raise ValueError("usb source_url must be a numeric device index")
+        return self
+
+
+class CameraTestResult(APIModel):
+    """Probe outcome (always HTTP 200 — a failed probe is a result, not an error)."""
+
+    ok: bool
+    source_type: str
+    #: The probed URL with the password masked (never the real password).
+    source_url_masked: str | None = None
+    #: On success: the full source URL to store when saving the camera.
+    #: Contains the percent-encoded credentials the server built.
+    source_url: str | None = None
+    width: int | None = None
+    height: int | None = None
+    fps: float | None = None
+    snapshot_b64: str | None = None  # JPEG, downscaled to <= 480 px wide
+    error: str | None = None
+
+
+class CameraStatus(APIModel):
+    """Live pipeline status for one camera (all-None fields = never started)."""
+
+    camera_id: int
+    name: str | None = None
+    running: bool = False
+    frames: int = 0
+    fps: float = 0.0
+    last_frame_ts: int | None = None
+    gaps: int = 0
+    backend: str | None = None
+    device: str | None = None
+    source_type: str | None = None
+    started_ts: int | None = None
+    last_error: str | None = None
+    #: M10 drift watchdog: None = not calibrated yet / camera never started.
+    drift_ok: bool | None = None
+    drift_score: float | None = None  # last SSIM score vs the calibration snapshot
+
+
+# -- lines ----------------------------------------------------------------------
+
+
+class LineCreate(APIModel):
+    name: str = Field(default="Line", max_length=200)
+    x1: NormCoord
+    y1: NormCoord
+    x2: NormCoord
+    y2: NormCoord
+    count_directions: str = "out,in"
+    min_track_age: int = Field(default=3, ge=0, le=100)
+    hysteresis_px: int = Field(default=12, ge=0, le=200)
+    cooldown_ms: int = Field(default=1500, ge=0, le=60_000)
+    enabled: bool = True
+
+    @field_validator("count_directions")
+    @classmethod
+    def _known_directions(cls, value: str) -> str:
+        from toskana.vision.line_crossing import parse_count_directions
+
+        parse_count_directions(value)  # raises ValueError on unknown vocabulary
+        return value
+
+
+class LineUpdate(APIModel):
+    name: str | None = Field(default=None, max_length=200)
+    x1: NormCoord | None = None
+    y1: NormCoord | None = None
+    x2: NormCoord | None = None
+    y2: NormCoord | None = None
+    count_directions: str | None = None
+    min_track_age: int | None = Field(default=None, ge=0, le=100)
+    hysteresis_px: int | None = Field(default=None, ge=0, le=200)
+    cooldown_ms: int | None = Field(default=None, ge=0, le=60_000)
+    enabled: bool | None = None
+
+    @field_validator("count_directions")
+    @classmethod
+    def _known_directions(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from toskana.vision.line_crossing import parse_count_directions
+
+        parse_count_directions(value)
+        return value
+
+
+class LineRead(ORMModel):
+    id: int
+    restaurant_id: int
+    camera_id: int
+    name: str
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    count_directions: str
+    min_track_age: int
+    hysteresis_px: int
+    cooldown_ms: int
+    enabled: bool
+
+
+# -- categories & menu items ------------------------------------------------------
+
+
+class CategoryCreate(APIModel):
+    key: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9\-_]*$")
+    name_de: str = Field(min_length=1, max_length=200)
+    name_en: str = Field(min_length=1, max_length=200)
+    color_hex: str = Field(default="#888888", pattern=r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
+    sort_order: int = 0
+
+
+class CategoryUpdate(APIModel):
+    name_de: str | None = Field(default=None, min_length=1, max_length=200)
+    name_en: str | None = Field(default=None, min_length=1, max_length=200)
+    color_hex: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
+    sort_order: int | None = None
+
+
+class CategoryRead(ORMModel):
+    id: int
+    restaurant_id: int
+    key: str
+    name_de: str
+    name_en: str
+    color_hex: str
+    sort_order: int
+
+
+class MenuItemCreate(APIModel):
+    category_id: int
+    name: str = Field(min_length=1, max_length=200)
+    price: float | None = Field(default=None, ge=0)
+    is_active: bool = True
+
+
+class MenuItemUpdate(APIModel):
+    category_id: int | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    price: float | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+
+
+class MenuItemRead(ORMModel):
+    id: int
+    restaurant_id: int
+    category_id: int
+    name: str
+    price: float | None
+    is_active: bool
+
+
+# -- class mappings -------------------------------------------------------------------
+
+
+class MappingCreate(APIModel):
+    model_id: int
+    model_class_id: int = Field(ge=0)
+    model_class_name: str = Field(min_length=1, max_length=200)
+    category_id: int | None = None
+    menu_item_id: int | None = None
+    min_confidence: float = Field(default=0.35, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _has_target(self) -> MappingCreate:
+        if self.category_id is None and self.menu_item_id is None:
+            raise ValueError("mapping needs category_id or menu_item_id")
+        return self
+
+
+class MappingUpdate(APIModel):
+    model_class_id: int | None = Field(default=None, ge=0)
+    model_class_name: str | None = Field(default=None, min_length=1, max_length=200)
+    category_id: int | None = None
+    menu_item_id: int | None = None
+    min_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class MappingBulkItem(APIModel):
+    """One entry of the bulk mapping set for a model (model_id from the path)."""
+
+    model_class_id: int = Field(ge=0)
+    model_class_name: str = Field(min_length=1, max_length=200)
+    category_id: int | None = None
+    menu_item_id: int | None = None
+    min_confidence: float = Field(default=0.35, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _has_target(self) -> MappingBulkItem:
+        if self.category_id is None and self.menu_item_id is None:
+            raise ValueError("mapping needs category_id or menu_item_id")
+        return self
+
+
+class MappingRead(ORMModel):
+    id: int
+    restaurant_id: int
+    model_id: int
+    model_class_id: int
+    model_class_name: str
+    category_id: int | None
+    menu_item_id: int | None
+    min_confidence: float
+
+
+# -- models registry ---------------------------------------------------------------------
+
+
+class ModelRead(ORMModel):
+    id: int
+    restaurant_id: int | None
+    name: str
+    version: str
+    kind: str
+    path: str
+    classes_json: str
+    metrics_json: str | None
+    is_active: bool
+
+
+# -- sessions (shifts) ---------------------------------------------------------------------
+
+
+class SessionCreate(APIModel):
+    name: str = Field(min_length=1, max_length=200)
+    started_ts: int | None = None  # default: now
+    note: str | None = None
+
+
+class SessionUpdate(APIModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    started_ts: int | None = None
+    ended_ts: int | None = None
+    note: str | None = None
+
+
+class SessionRead(ORMModel):
+    id: int
+    restaurant_id: int
+    name: str
+    started_ts: int
+    ended_ts: int | None
+    note: str | None
+
+
+# -- events ----------------------------------------------------------------------------------
+
+
+class EventRead(ORMModel):
+    id: str
+    restaurant_id: int
+    camera_id: int
+    line_id: int | None
+    session_id: int | None
+    track_id: int
+    category_id: int | None
+    menu_item_id: int | None
+    menu_item_name: str | None = None
+    raw_class_name: str
+    confidence: float
+    direction: Direction
+    ts: int
+    frame_index: int | None
+    anchor_x: float
+    anchor_y: float
+    snapshot_path: str | None
+    dedup_group_id: str | None
+    is_canonical: bool
+    #: AI Event Refiner: True once a vision LLM verified/corrected the event.
+    refined: bool = False
+    refiner_note: str | None = None
+
+
+class EventPatch(APIModel):
+    """Manual dedup review: only the canonical flag is mutable."""
+
+    is_canonical: bool
+
+
+# -- data gaps ---------------------------------------------------------------------------------
+
+
+class DataGapRead(ORMModel):
+    """A recorded no-data interval (outage / start / stop / drift marker)."""
+
+    id: int
+    restaurant_id: int
+    camera_id: int
+    from_ts: int
+    to_ts: int | None  # None = ongoing
+    reason: str
+
+
+# -- stats -------------------------------------------------------------------------------------
+
+
+class TimeseriesRow(APIModel):
+    bucket_ts: int  # epoch ms of the local bucket start
+    bucket_iso: str  # ISO8601 local bucket start (restaurant timezone)
+    group: str | None  # group key value (category/camera id or direction); None = ungrouped
+    out: int
+    in_: int = Field(serialization_alias="in")
+    net: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class TimeseriesResponse(APIModel):
+    bucket: Literal["hour", "day"]
+    group_by: Literal["category", "camera", "direction", "menu_item"] | None
+    timezone: str
+    from_ts: int | None
+    to_ts: int | None
+    rows: list[TimeseriesRow]
+
+
+class CategoryCounter(APIModel):
+    category_id: int | None
+    key: str | None
+    name_de: str | None
+    name_en: str | None
+    color_hex: str | None
+    out: int
+    in_: int = Field(serialization_alias="in")
+    net: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class MenuItemCounter(APIModel):
+    """Today's totals for one named menu item (Phase 2)."""
+
+    menu_item_id: int
+    name: str
+    category_id: int | None
+    out: int
+    in_: int = Field(serialization_alias="in")
+    net: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class StatsSummary(APIModel):
+    date: str  # local date (restaurant timezone)
+    timezone: str
+    from_ts: int
+    to_ts: int
+    categories: list[CategoryCounter]
+    #: Only menu items with at least one canonical event today appear here.
+    menu_items: list[MenuItemCounter]
+    total_out: int
+    total_in: int
+    total_net: int
+    #: Number of recorded data gaps overlapping the day (suspect-data flag).
+    gaps_count: int = 0
+
+
+# -- reconcile ------------------------------------------------------------------------------------
+
+
+class ReconcileRow(APIModel):
+    category_key: str
+    category_id: int | None
+    date: str
+    pos_quantity: float
+    counted_out: int
+    counted_in: int
+    counted_net: int
+    variance: float  # counted_net - pos_quantity
+    variance_pct: float | None  # None when pos_quantity == 0
+    unknown_category: bool = False
+
+
+class ReconcileReport(APIModel):
+    restaurant_id: int
+    default_date: str
+    timezone: str
+    rows: list[ReconcileRow]
+    total_pos_quantity: float
+    total_counted_net: int
+    #: id of the persisted ``reconcile_runs`` row this report was stored as.
+    run_id: str | None = None
+
+
+class ReconcileRunRead(APIModel):
+    """One persisted reconciliation run (report history)."""
+
+    id: str
+    restaurant_id: int
+    date: str
+    uploaded_filename: str | None
+    rows: list[ReconcileRow]
+    total_pos_quantity: float
+    total_counted_net: int
+    created_ts: int
+
+
+# -- video analysis ----------------------------------------------------------------------------
+
+AnalysisStatus = Literal["queued", "downloading", "running", "done", "error", "cancelled"]
+
+
+class AnalysisJobRead(APIModel):
+    """One in-memory analysis job (jobs do not survive a server restart)."""
+
+    id: str
+    restaurant_id: int
+    status: AnalysisStatus
+    video_name: str
+    source_url: str | None = None
+    backend: str
+    #: Camera/line rows the job counts through (None until the video is ready).
+    camera_id: int | None = None
+    line_id: int | None = None
+    frames_done: int = 0
+    frames_total: int | None = None
+    #: counts[direction][class_name] with direction in {out, in}.
+    counts: dict[str, dict[str, int]]
+    total_out: int = 0
+    total_in: int = 0
+    error: str | None = None
+    created_ts: int
+    finished_ts: int | None = None
+
+
+# -- refiner settings (dashboard-managed, /settings/refiner) ---------------------------------------
+
+RefinerProviderLiteral = Literal["off", "anthropic", "openai_compatible"]
+
+
+class RefinerSettingsRead(APIModel):
+    """Effective refiner settings with the API key masked: only a boolean
+    flag says whether a key is stored — the key itself is never returned."""
+
+    provider: RefinerProviderLiteral
+    model: str
+    base_url: str
+    has_api_key: bool
+    only_below_confidence: float
+    match_menu_items: bool
+    max_per_minute: int
+
+
+class RefinerSettingsUpdate(APIModel):
+    """PUT body. ``api_key``: absent/None = keep the stored key,
+    empty string = clear it, anything else = replace it."""
+
+    provider: RefinerProviderLiteral = "off"
+    model: str = Field(default="claude-haiku-4-5", min_length=1, max_length=200)
+    base_url: str = Field(default="http://localhost:11434/v1", min_length=1, max_length=1000)
+    api_key: str | None = Field(default=None, max_length=512)
+    only_below_confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    match_menu_items: bool = True
+    max_per_minute: int = Field(default=30, ge=0, le=6000)
+
+
+class RefinerSettingsTest(RefinerSettingsUpdate):
+    """POST /settings/refiner/test body: the PUT fields plus whether to fall
+    back to the saved API key when none is posted (default: yes)."""
+
+    use_saved_api_key: bool = True
+
+
+class RefinerTestReply(APIModel):
+    """The model's verdict on the generated test image."""
+
+    category_key: str | None
+    menu_item_name: str | None
+    confidence: float
+    is_item: bool
+
+
+class RefinerTestResult(APIModel):
+    """Connection-test outcome (always HTTP 200 — a failure is ``ok: false``)."""
+
+    ok: bool
+    latency_ms: int | None = None
+    reply: RefinerTestReply | None = None
+    error: str | None = None
+
+
+# -- system ----------------------------------------------------------------------------------------
+
+
+class SystemHealth(APIModel):
+    status: Literal["ok", "degraded"]
+    db_ok: bool
+    pipelines: list[CameraStatus]
+    writer_written_events: int
+    writer_written_gaps: int
+    #: M8 cross-camera dedup (active only with a >=2-camera exit group).
+    dedup_active: bool = False
+    dedup_matches: int = 0
+    dedup_demotions: int = 0
+    #: AI Event Refiner (vision LLM verification; ``refiner_provider`` config).
+    refiner_provider: str = "off"
+    refiner_model: str | None = None
+    refiner_enabled: bool = False
+    refiner_queue_size: int = 0
+    refiner_refined: int = 0
+    refiner_failures: int = 0
+    refiner_skipped: int = 0
+    refiner_last_error: str | None = None
+
+
+class SystemInfo(APIModel):
+    version: str
+    active_restaurant_slug: str
+    active_restaurant: RestaurantRead | None
+    db_path: str
+    db_size_bytes: int | None
+    torch_available: bool
+    cuda_available: bool
+    detector_backend: str
+    device: str
+    loop_file_sources: bool
+    snapshots_dir: str
+    snapshot_retention_days: int
+    #: Configured preset (cpu|gpu|auto) and what it resolved to on this host.
+    performance_preset: str
+    performance_preset_resolved: str
+    preset_imgsz: int
+    preset_frame_skip: int
+
+
+class RetentionRunResult(APIModel):
+    """Outcome of one snapshot-retention pass (``POST /system/retention/run``)."""
+
+    snapshot_retention_days: int
+    cutoff_ms: int  # snapshots of events older than this were removed
+    deleted_snapshots: int
+    cleared_events: int  # events whose snapshot_path was set to NULL
+    orphans_removed: int  # unreferenced snapshot files removed
+    removed_dirs: int  # empty per-day directories pruned
+    runs: int  # total passes since app start (scheduled + manual)
+
+
+class MessageResponse(APIModel):
+    detail: str
+
+
+AnyPayload = dict[str, Any]

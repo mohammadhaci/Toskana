@@ -28,6 +28,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from toskana.db.base import Base
 
 
+class AppSetting(Base):
+    """Dashboard-managed key/value settings (JSON blobs), e.g. the AI Event
+    Refiner configuration under key ``refiner``. Values stored here override
+    the corresponding ``config.yaml`` fields (see ``toskana.settings_store``)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+
+
 class Restaurant(Base):
     """A tenant: one restaurant (site) with its own menu, cameras and models."""
 
@@ -110,6 +121,9 @@ class Camera(Base):
     model_id: Mapped[int | None] = mapped_column(
         ForeignKey("models_registry.id", ondelete="SET NULL"), default=None
     )  # per-camera model override; NULL = restaurant's active model
+    detector_backend: Mapped[str | None] = mapped_column(
+        String(16), default=None
+    )  # per-camera override: synthetic | yolo; NULL = resolved global default
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="cameras")
@@ -329,6 +343,10 @@ class Event(Base):
     snapshot_path: Mapped[str | None] = mapped_column(String(1000), default=None)
     dedup_group_id: Mapped[str | None] = mapped_column(String(26), default=None)
     is_canonical: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: AI Event Refiner (vision LLM): True once the event was verified.
+    refined: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: short audit note: backend/model + original category + verdict.
+    refiner_note: Mapped[str | None] = mapped_column(Text, default=None)
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="events")
     camera: Mapped[Camera] = relationship()
@@ -336,6 +354,11 @@ class Event(Base):
     category: Mapped[Category] = relationship()
     menu_item: Mapped[MenuItem] = relationship()
     session: Mapped[ServiceSession] = relationship()
+
+    @property
+    def menu_item_name(self) -> str | None:
+        """Denormalized item name for API serialization (Phase 2)."""
+        return self.menu_item.name if self.menu_item is not None else None
 
     __table_args__ = (
         CheckConstraint("direction IN ('out', 'in')", name="ck_events_direction"),
@@ -365,6 +388,27 @@ class DataGap(Base):
     __table_args__ = (Index("ix_data_gaps_camera_from_ts", "camera_id", "from_ts"),)
 
 
+class ReconcileRun(Base):
+    """A persisted POS reconciliation report (upload + computed variances)."""
+
+    __tablename__ = "reconcile_runs"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)  # ULID (creation-ordered)
+    restaurant_id: Mapped[int] = mapped_column(
+        ForeignKey("restaurants.id", ondelete="CASCADE"), index=True
+    )
+    date: Mapped[str] = mapped_column(String(10))  # default local date (YYYY-MM-DD)
+    uploaded_filename: Mapped[str | None] = mapped_column(String(255), default=None)
+    rows_json: Mapped[str] = mapped_column(Text)  # JSON list of ReconcileRow dicts
+    total_pos_quantity: Mapped[float] = mapped_column(Float)
+    total_counted_net: Mapped[int] = mapped_column(Integer)
+    created_ts: Mapped[int] = mapped_column(Integer)  # UTC epoch ms
+
+    restaurant: Mapped[Restaurant] = relationship()
+
+    __table_args__ = (Index("ix_reconcile_runs_restaurant_created", "restaurant_id", "created_ts"),)
+
+
 class CountingEvalRun(Base):
     """Result of an evaluation campaign against ground truth."""
 
@@ -381,6 +425,10 @@ class CountingEvalRun(Base):
         ForeignKey("models_registry.id", ondelete="SET NULL"), default=None
     )
     ground_truth_path: Mapped[str | None] = mapped_column(String(1000), default=None)
+    video_ref: Mapped[str | None] = mapped_column(String(2000), default=None)
+    config_json: Mapped[str | None] = mapped_column(Text, default=None)  # CLI/backend/line config
+    gt_counts_json: Mapped[str | None] = mapped_column(Text, default=None)
+    measured_counts_json: Mapped[str | None] = mapped_column(Text, default=None)
     metrics_json: Mapped[str] = mapped_column(Text)  # precision/recall/MAE per category & hour
     notes: Mapped[str | None] = mapped_column(Text, default=None)
 
