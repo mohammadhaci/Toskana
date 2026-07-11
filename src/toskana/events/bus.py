@@ -28,6 +28,10 @@ TOPIC_CORRECTION = "dedup_correction"
 #: DriftDetector -> /ws/live + monitoring: a camera drift alarm was raised
 #: (or cleared); forwarded to clients as ``{type: "drift", ...}``.
 TOPIC_DRIFT = "drift"
+#: RefinerEngine -> /ws/live: a vision LLM verified/corrected an event's
+#: category or menu item; forwarded to clients as ``{type: "refined", ...}``
+#: (same correction pattern as the M8 dedup demotions).
+TOPIC_REFINED = "refiner_correction"
 
 
 class EventBus:

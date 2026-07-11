@@ -28,6 +28,8 @@ def health(request: Request, session: SessionDep, manager: ManagerDep) -> schema
     writer = request.app.state.writer
     dedup = getattr(request.app.state, "dedup", None)
     dedup_stats = dedup.stats if dedup is not None else None
+    refiner = getattr(request.app.state, "refiner", None)
+    refiner_stats = refiner.stats if refiner is not None else None
     pipelines = [schemas.CameraStatus(**status) for status in manager.status()]
     return schemas.SystemHealth(
         status="ok" if db_ok else "degraded",
@@ -38,6 +40,14 @@ def health(request: Request, session: SessionDep, manager: ManagerDep) -> schema
         dedup_active=dedup is not None,
         dedup_matches=dedup_stats.matches if dedup_stats is not None else 0,
         dedup_demotions=dedup_stats.demotions if dedup_stats is not None else 0,
+        refiner_provider=refiner_stats.provider if refiner_stats is not None else "off",
+        refiner_model=refiner_stats.model if refiner_stats is not None else None,
+        refiner_enabled=refiner_stats.enabled if refiner_stats is not None else False,
+        refiner_queue_size=refiner_stats.queue_size if refiner_stats is not None else 0,
+        refiner_refined=refiner_stats.refined if refiner_stats is not None else 0,
+        refiner_failures=refiner_stats.failures if refiner_stats is not None else 0,
+        refiner_skipped=refiner_stats.skipped if refiner_stats is not None else 0,
+        refiner_last_error=refiner_stats.last_error if refiner_stats is not None else None,
     )
 
 

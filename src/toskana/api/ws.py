@@ -13,6 +13,11 @@ event_id, dedup_group_id, is_canonical: false, category_id, menu_item_id,
 direction, camera_id, ts}`` — so live counters can decrement the affected
 category/direction without a reload.
 
+AI Event Refiner: when the vision LLM verifies/corrects an event the
+RefinerEngine publishes on the ``refiner_correction`` bus topic, forwarded
+here as ``{type: "refined", event_id, category_id, previous_category_id,
+menu_item_id, refiner_note, ...}``.
+
 Bus callbacks fire on pipeline threads; they are marshalled into the event
 loop with ``call_soon_threadsafe`` and fanned out to one ``asyncio.Queue``
 per connected client, so a slow client never blocks the pipelines.
@@ -31,7 +36,14 @@ from sqlalchemy import select
 
 from toskana.api.timeutils import local_day_bounds, local_today
 from toskana.db.models import Category, Event, Restaurant
-from toskana.events.bus import TOPIC_CORRECTION, TOPIC_CROSSING, TOPIC_DRIFT, TOPIC_GAP, EventBus
+from toskana.events.bus import (
+    TOPIC_CORRECTION,
+    TOPIC_CROSSING,
+    TOPIC_DRIFT,
+    TOPIC_GAP,
+    TOPIC_REFINED,
+    EventBus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +90,21 @@ _CORRECTION_KEYS = (
     "ts",
 )
 
+#: refiner_correction payload keys forwarded to WS clients.
+_REFINED_KEYS = (
+    "event_id",
+    "restaurant_id",
+    "camera_id",
+    "category_id",
+    "previous_category_id",
+    "menu_item_id",
+    "direction",
+    "ts",
+    "is_item",
+    "refined",
+    "refiner_note",
+)
+
 
 class LiveBroadcaster:
     """Fans bus events out to all connected ``/ws/live`` clients."""
@@ -96,6 +123,7 @@ class LiveBroadcaster:
         self._unsubscribes.append(self._bus.subscribe(TOPIC_CROSSING, self._on_crossing))
         self._unsubscribes.append(self._bus.subscribe(TOPIC_GAP, self._on_gap))
         self._unsubscribes.append(self._bus.subscribe(TOPIC_CORRECTION, self._on_correction))
+        self._unsubscribes.append(self._bus.subscribe(TOPIC_REFINED, self._on_refined))
         self._unsubscribes.append(self._bus.subscribe(TOPIC_DRIFT, self._on_drift))
 
     def stop(self) -> None:
@@ -135,6 +163,11 @@ class LiveBroadcaster:
         """A dedup demotion: live counters must decrement this event."""
         correction = {key: payload[key] for key in _CORRECTION_KEYS if key in payload}
         self._dispatch({"type": "correction", **correction})
+
+    def _on_refined(self, payload: dict[str, Any]) -> None:
+        """The vision LLM verified/corrected an event (AI Event Refiner)."""
+        refined = {key: payload[key] for key in _REFINED_KEYS if key in payload}
+        self._dispatch({"type": "refined", **refined})
 
     def _on_drift(self, payload: dict[str, Any]) -> None:
         """A camera drift alarm was raised or cleared (M10 watchdog)."""

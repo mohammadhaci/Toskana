@@ -21,6 +21,7 @@ dependencies = [
     "python-ulid",
     "pillow",
     "python-multipart",
+    "httpx",
 ]
 
 [project.optional-dependencies]

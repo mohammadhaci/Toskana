@@ -13,6 +13,9 @@
 * a :class:`~toskana.retention.RetentionJob` deleting expired event
   snapshots daily (manually triggerable via ``POST
   /api/system/retention/run``),
+* the :class:`~toskana.refiner_engine.RefinerEngine` (AI Event Refiner,
+  ``refiner_provider`` != off) verifying counted events through a vision
+  LLM — started after the writer, stopped before it,
 * the REST routers under ``/api`` and the built dashboard (``web/dist``)
   at ``/`` when present.
 
@@ -49,6 +52,7 @@ from toskana.api.ws import LiveBroadcaster
 from toskana.config import AppConfig
 from toskana.events.bus import EventBus
 from toskana.events.writer import EventWriter, make_writer_session_factory
+from toskana.refiner_engine import RefinerEngine
 from toskana.retention import RetentionJob
 from toskana.vision.dedup import build_dedup_engine
 from toskana.vision.manager import PipelineManager
@@ -112,6 +116,9 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         analysis = AnalysisJobManager(config, bus=bus, session_factory=session_factory)
         broadcaster = LiveBroadcaster(bus)
         retention = RetentionJob(config, session_factory)
+        refiner = RefinerEngine(
+            config, bus=bus, session_factory=make_writer_session_factory(config.db_path)
+        )
         notifier = (
             AlertNotifier(config.alert_webhook_url, bus=bus, session_factory=session_factory)
             if config.alert_webhook_url
@@ -131,10 +138,12 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         app.state.dedup = dedup
         app.state.retention = retention
         app.state.notifier = notifier
+        app.state.refiner = refiner
 
         writer.start()
         if dedup is not None:
             dedup.start()  # after writer.start(): inserts queue before demotions
+        refiner.start()  # after writer: event rows exist before refinement (no-op when off)
         broadcaster.start(asyncio.get_running_loop())
         retention.start()  # daily snapshot-retention pass (GDPR)
         if notifier is not None:
@@ -150,6 +159,7 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
             await asyncio.to_thread(retention.stop)
             if notifier is not None:
                 await asyncio.to_thread(notifier.stop)
+            await asyncio.to_thread(refiner.stop)  # before writer.stop: rows still writable
             if dedup is not None:
                 dedup.stop()
             broadcaster.stop()

@@ -276,6 +276,9 @@ export interface EventRecord {
   snapshot_path: string | null;
   dedup_group_id: string | null;
   is_canonical: boolean;
+  /** AI Event Refiner: true once a vision LLM verified/corrected the event. */
+  refined: boolean;
+  refiner_note: string | null;
 }
 
 // -- stats ------------------------------------------------------------------------
@@ -439,6 +442,15 @@ export interface SystemHealth {
   dedup_active?: boolean;
   dedup_matches?: number;
   dedup_demotions?: number;
+  /** AI Event Refiner status block (optional for forward-compat). */
+  refiner_provider?: string;
+  refiner_model?: string | null;
+  refiner_enabled?: boolean;
+  refiner_queue_size?: number;
+  refiner_refined?: number;
+  refiner_failures?: number;
+  refiner_skipped?: number;
+  refiner_last_error?: string | null;
 }
 
 export interface SystemInfo {

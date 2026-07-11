@@ -465,6 +465,9 @@ class EventRead(ORMModel):
     snapshot_path: str | None
     dedup_group_id: str | None
     is_canonical: bool
+    #: AI Event Refiner: True once a vision LLM verified/corrected the event.
+    refined: bool = False
+    refiner_note: str | None = None
 
 
 class EventPatch(APIModel):
@@ -632,6 +635,15 @@ class SystemHealth(APIModel):
     dedup_active: bool = False
     dedup_matches: int = 0
     dedup_demotions: int = 0
+    #: AI Event Refiner (vision LLM verification; ``refiner_provider`` config).
+    refiner_provider: str = "off"
+    refiner_model: str | None = None
+    refiner_enabled: bool = False
+    refiner_queue_size: int = 0
+    refiner_refined: int = 0
+    refiner_failures: int = 0
+    refiner_skipped: int = 0
+    refiner_last_error: str | None = None
 
 
 class SystemInfo(APIModel):

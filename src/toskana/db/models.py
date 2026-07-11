@@ -332,6 +332,10 @@ class Event(Base):
     snapshot_path: Mapped[str | None] = mapped_column(String(1000), default=None)
     dedup_group_id: Mapped[str | None] = mapped_column(String(26), default=None)
     is_canonical: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: AI Event Refiner (vision LLM): True once the event was verified.
+    refined: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: short audit note: backend/model + original category + verdict.
+    refiner_note: Mapped[str | None] = mapped_column(Text, default=None)
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="events")
     camera: Mapped[Camera] = relationship()

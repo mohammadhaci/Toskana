@@ -204,6 +204,15 @@ export default function EventsPage() {
                           <span className="btn-row">
                             <ColorChip color={category?.color_hex} />
                             {itemLabel(event, category, i18n.language, t("common.unmapped"))}
+                            {event.refined && (
+                              <span
+                                title={event.refiner_note ?? t("events.refinedBadge")}
+                                aria-label={t("events.refinedBadge")}
+                                style={{ cursor: "help" }}
+                              >
+                                ✨
+                              </span>
+                            )}
                           </span>
                         </td>
                         <td>{event.raw_class_name}</td>

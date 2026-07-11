@@ -93,6 +93,24 @@ export function liveReducer(state: LiveState, action: LiveAction): LiveState {
       }
       return state;
     }
+    case "refined": {
+      // AI Event Refiner corrected an event's category: move the count.
+      const m = message as {
+        category_id?: number | null;
+        previous_category_id?: number | null;
+        direction?: string;
+      };
+      if (m.direction && m.category_id !== undefined && m.previous_category_id !== undefined && m.category_id !== m.previous_category_id) {
+        const counters = bump(
+          bump(state.counters, m.previous_category_id, m.direction, -1),
+          m.category_id,
+          m.direction,
+          1,
+        );
+        return { ...state, counters };
+      }
+      return state;
+    }
     default:
       return state; // unknown message types are ignored gracefully
   }

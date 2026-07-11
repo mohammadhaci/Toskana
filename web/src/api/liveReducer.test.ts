@@ -106,6 +106,34 @@ describe("liveReducer", () => {
     expect(state.counters[0]).toMatchObject({ out: 4, in: 2, net: 2 });
   });
 
+  it("refined message moves the count between categories", () => {
+    const seeded = withMessage(initialLiveState, {
+      type: "hello",
+      counters: [counter(1, 5, 2), counter(2, 1, 0)],
+    });
+    const state = withMessage(seeded, {
+      type: "refined",
+      event_id: "e1",
+      category_id: 2,
+      previous_category_id: 1,
+      direction: "out",
+    });
+    expect(state.counters[0]).toMatchObject({ category_id: 1, out: 4, net: 2 });
+    expect(state.counters[1]).toMatchObject({ category_id: 2, out: 2, net: 2 });
+  });
+
+  it("refined message without a category change leaves counters untouched", () => {
+    const seeded = withMessage(initialLiveState, { type: "hello", counters: [counter(1, 5, 2)] });
+    const state = withMessage(seeded, {
+      type: "refined",
+      event_id: "e1",
+      category_id: 1,
+      previous_category_id: 1,
+      direction: "out",
+    });
+    expect(state.counters).toEqual(seeded.counters);
+  });
+
   it("records gaps capped at the limit", () => {
     const state = withMessage(initialLiveState, {
       type: "gap",

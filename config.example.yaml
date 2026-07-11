@@ -30,5 +30,36 @@ snapshot_retention_days: 30
 # Inference device: auto (cuda -> mps -> cpu), or force cpu/cuda/mps.
 device: auto
 
+# --- AI Event Refiner (optional, see docs/refiner.md) ------------------------
+# After each counted crossing the event snapshot (cropped to the item) is sent
+# to a vision LLM that verifies/corrects the category and optionally names the
+# exact menu item. No model training involved. Default: off.
+refiner_provider: off            # off | anthropic | openai_compatible
+
+# anthropic: Claude model id (claude-haiku-4-5 is fast + cheap).
+# openai_compatible: the local model name, e.g. qwen2.5vl (Ollama) or the
+# model id shown by LM Studio's local server.
+refiner_model: claude-haiku-4-5
+
+# openai_compatible only: the server's OpenAI-style base URL.
+#   Ollama:    http://localhost:11434/v1
+#   LM Studio: http://localhost:1234/v1
+refiner_base_url: http://localhost:11434/v1
+
+# anthropic: API key (or set the ANTHROPIC_API_KEY environment variable).
+# openai_compatible: optional bearer token — local servers need none.
+# refiner_api_key: sk-ant-...
+
+# Only refine events with detector confidence below this value.
+# 1.0 = refine every event; lowering it (e.g. 0.65) cuts LLM cost by only
+# double-checking uncertain detections.
+refiner_only_below_confidence: 1.0
+
+# Also send the menu item names so the LLM can name the exact dish/drink.
+refiner_match_menu_items: true
+
+# Max LLM calls per minute (excess events wait in a small queue).
+refiner_max_per_minute: 30
+
 # Logging level: DEBUG, INFO, WARNING, ERROR.
 log_level: INFO

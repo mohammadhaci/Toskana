@@ -255,6 +255,9 @@ class CameraPipeline:
             "canonical_direction": crossing.direction,
             "class_name": crossing.class_name,
             "menu_item_name": resolution.menu_item_name,
+            # Pixel bbox of the item — lets the RefinerEngine crop the
+            # snapshot to the item before sending it to the vision LLM.
+            "bbox_px": crossing.bbox_px,
         }
         result.add(crossing, payload)
         if self.bus is not None:

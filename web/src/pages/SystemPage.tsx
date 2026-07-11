@@ -153,6 +153,46 @@ export default function SystemPage() {
       <Card
         title={
           <>
+            <span>{t("system.refinerTitle")}</span>
+            {health &&
+              (health.refiner_enabled ? (
+                <Badge tone="good">{t("system.refinerEnabled")}</Badge>
+              ) : (
+                <Badge>{t("system.refinerOff")}</Badge>
+              ))}
+          </>
+        }
+      >
+        <p style={{ marginTop: 0, color: "var(--ink-2)", fontSize: 13 }}>
+          {t("system.refinerIntro")}
+        </p>
+        {health && (
+          <dl className="kv">
+            <dt>{t("system.refinerProvider")}</dt>
+            <dd>{health.refiner_provider ?? "off"}</dd>
+            <dt>{t("system.refinerModel")}</dt>
+            <dd>{health.refiner_model ?? "—"}</dd>
+            <dt>{t("system.refinerRefined")}</dt>
+            <dd>{health.refiner_refined ?? 0}</dd>
+            <dt>{t("system.refinerFailures")}</dt>
+            <dd>{health.refiner_failures ?? 0}</dd>
+            <dt>{t("system.refinerSkipped")}</dt>
+            <dd>{health.refiner_skipped ?? 0}</dd>
+            <dt>{t("system.refinerQueue")}</dt>
+            <dd>{health.refiner_queue_size ?? 0}</dd>
+            {health.refiner_last_error && (
+              <>
+                <dt>{t("system.lastError")}</dt>
+                <dd style={{ color: "var(--critical)" }}>{health.refiner_last_error}</dd>
+              </>
+            )}
+          </dl>
+        )}
+      </Card>
+
+      <Card
+        title={
+          <>
             <span>{t("system.retentionTitle")}</span>
             <button className="btn sm" disabled={retentionBusy} onClick={() => void runRetention()}>
               {retentionBusy ? t("system.retentionRunning") : t("system.retentionRun")}

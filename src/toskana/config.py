@@ -58,6 +58,28 @@ class AppConfig(BaseSettings):
     # Hardware tuning for the YOLO backend: cpu (imgsz 480, every 2nd frame),
     # gpu (imgsz 640, every frame) or auto (gpu when CUDA is available).
     performance_preset: str = "auto"  # cpu | gpu | auto
+    # AI Event Refiner: after each counted crossing, send the event snapshot
+    # (cropped to the item) to a vision LLM that verifies/corrects the
+    # category and optionally names the exact menu item. See docs/refiner.md.
+    refiner_provider: str = "off"  # off | anthropic | openai_compatible
+    # anthropic: Claude model id; openai_compatible: e.g. "qwen2.5vl" (Ollama)
+    # or the model id shown by LM Studio's local server.
+    refiner_model: str = "claude-haiku-4-5"
+    # openai_compatible only: Ollama http://localhost:11434/v1,
+    # LM Studio http://localhost:1234/v1.
+    refiner_base_url: str = "http://localhost:11434/v1"
+    # anthropic: falls back to the ANTHROPIC_API_KEY env var when unset;
+    # openai_compatible: optional bearer token (local servers need none).
+    refiner_api_key: str | None = None
+    # Only refine events whose detector confidence is below this threshold.
+    # 1.0 (default) refines everything; lowering it (e.g. 0.65) cuts cost by
+    # only double-checking uncertain detections.
+    refiner_only_below_confidence: float = 1.0
+    # Also offer the restaurant's menu item names so the LLM can identify
+    # the exact dish/drink (Phase 2), not just the category.
+    refiner_match_menu_items: bool = True
+    # Rate limit for LLM calls; excess events wait in a small queue.
+    refiner_max_per_minute: int = 30
 
     @field_validator("performance_preset")
     @classmethod
@@ -65,6 +87,16 @@ class AppConfig(BaseSettings):
         if value.strip().lower() not in ("cpu", "gpu", "auto"):
             raise ValueError(f"performance_preset must be cpu, gpu or auto: {value!r}")
         return value.strip().lower()
+
+    @field_validator("refiner_provider")
+    @classmethod
+    def _known_refiner_provider(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in ("off", "anthropic", "openai_compatible"):
+            raise ValueError(
+                f"refiner_provider must be off, anthropic or openai_compatible: {value!r}"
+            )
+        return normalized
 
     @classmethod
     def settings_customise_sources(
