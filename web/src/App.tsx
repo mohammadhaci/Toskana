@@ -10,6 +10,7 @@ import EventsPage from "./pages/EventsPage";
 import AnalysisPage from "./pages/AnalysisPage";
 import ReconcilePage from "./pages/ReconcilePage";
 import SystemPage from "./pages/SystemPage";
+import HelpPage from "./pages/HelpPage";
 import RestaurantsPage from "./pages/admin/RestaurantsPage";
 import CamerasPage from "./pages/admin/CamerasPage";
 import LineEditorPage from "./pages/admin/LineEditorPage";
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/analysis" element={<AnalysisPage />} />
           <Route path="/reconcile" element={<ReconcilePage />} />
           <Route path="/system" element={<SystemPage />} />
+          <Route path="/help" element={<HelpPage />} />
           <Route path="/admin/restaurants" element={<RestaurantsPage />} />
           <Route path="/admin/cameras" element={<CamerasPage />} />
           <Route path="/admin/cameras/:id/lines" element={<LineEditorPage />} />

@@ -21,12 +21,33 @@
     "exitGroups": "Exits",
     "menu": "Categories & menu",
     "mappings": "Class mappings",
-    "models": "Models"
+    "models": "Models",
+    "help": "Help"
   },
   "lang": {
     "label": "Language",
     "de": "German",
     "en": "English"
+  },
+  "help": {
+    "intro": "How Toskana works: counting and the optional AI check are two separate stages that work together.",
+    "stage1Title": "1. Base detection — the actual counting",
+    "stage1Body": "Runs around the clock locally inside Toskana, on every single camera frame — no LM Studio, no cloud. A detector (YOLO, or the synthetic demo detector) finds each item, tracks it, and counts it the moment it crosses the counting line. This stage produces the numbers you see in Live, Statistics and Events.",
+    "stage2Title": "2. AI checker — verification (optional)",
+    "stage2Body": "After each counted crossing, Toskana sends only the cropped image of that item to the model you chose — Gemma in LM Studio or Claude in the cloud. The model confirms or corrects the category and, when possible, names the exact menu item. It counts nothing — it only reviews what was already counted.",
+    "who": "Who analyzes the snapshots?",
+    "whoBody": "Counting is always done by Toskana's internal detector. The model in LM Studio (or Claude) analyzes the snapshots only in the check stage — it corrects the result but never replaces the count.",
+    "tableAction": "Task",
+    "tableWho": "Who",
+    "tableAlways": "Always on?",
+    "rowCountAction": "Count what crosses the line",
+    "rowCountWho": "Internal detector (YOLO / synthetic)",
+    "rowCountAlways": "Yes — on every frame",
+    "rowRefineAction": "Verify and correct the category",
+    "rowRefineWho": "LM Studio (Gemma) or Claude",
+    "rowRefineAlways": "Optional — counted events only",
+    "note": "Even with the AI checker switched off, the system keeps counting without interruption — only item-recognition accuracy is a little lower.",
+    "settingsLink": "Set up the AI checker on the “System” page (provider, model, test connection)."
   },
   "auth": {
     "title": "API token required",

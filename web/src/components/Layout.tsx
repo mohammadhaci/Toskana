@@ -20,6 +20,7 @@ const ADMIN: Array<{ to: string; key: string; icon: string }> = [
   { to: "/admin/mappings", key: "nav.mappings", icon: "🔗" },
   { to: "/admin/models", key: "nav.models", icon: "🧠" },
   { to: "/system", key: "nav.system", icon: "🩺" },
+  { to: "/help", key: "nav.help", icon: "❓" },
 ];
 
 function titleKeyFor(pathname: string): string {
@@ -29,6 +30,7 @@ function titleKeyFor(pathname: string): string {
   if (pathname.startsWith("/analysis")) return "nav.analysis";
   if (pathname.startsWith("/reconcile")) return "nav.reconcile";
   if (pathname.startsWith("/system")) return "nav.system";
+  if (pathname.startsWith("/help")) return "nav.help";
   if (pathname.startsWith("/admin/restaurants")) return "nav.restaurants";
   if (pathname.startsWith("/admin/cameras")) return "nav.cameras";
   if (pathname.startsWith("/admin/exit-groups")) return "nav.exitGroups";

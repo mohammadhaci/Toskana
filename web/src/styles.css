@@ -981,3 +981,24 @@ table.data tfoot td {
   border-radius: var(--radius-sm);
   background: #000;
 }
+
+/* -- help / info page ------------------------------------------------------ */
+
+.help p {
+  margin: 0;
+  line-height: 1.6;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.help-lead {
+  font-size: 15px;
+  font-weight: 550;
+  color: var(--ink) !important;
+}
+
+.help-note {
+  margin-top: var(--s3) !important;
+  font-size: 13px !important;
+  color: var(--ink-3) !important;
+}

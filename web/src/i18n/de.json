@@ -21,12 +21,33 @@
     "exitGroups": "Ausgänge",
     "menu": "Kategorien & Karte",
     "mappings": "Klassen-Zuordnung",
-    "models": "Modelle"
+    "models": "Modelle",
+    "help": "Hilfe"
   },
   "lang": {
     "label": "Sprache",
     "de": "Deutsch",
     "en": "Englisch"
+  },
+  "help": {
+    "intro": "So funktioniert Toskana: Die Zählung und die optionale KI-Prüfung sind zwei getrennte Stufen, die zusammenarbeiten.",
+    "stage1Title": "1. Basis-Erkennung — die eigentliche Zählung",
+    "stage1Body": "Läuft rund um die Uhr lokal in Toskana, auf jedem einzelnen Kamerabild — ohne LM Studio und ohne Cloud. Ein Erkenner (YOLO, oder der synthetische Demo-Erkenner) findet jeden Artikel, verfolgt ihn und zählt ihn genau dann, wenn er die Zähllinie überquert. Diese Stufe erzeugt die Zahlen in Live, Statistiken und Ereignissen.",
+    "stage2Title": "2. KI-Prüfer — Überprüfung (optional)",
+    "stage2Body": "Nach jeder gezählten Überquerung schickt Toskana nur den zugeschnittenen Bildausschnitt des Artikels an das von Ihnen gewählte Modell — Gemma in LM Studio oder Claude in der Cloud. Das Modell bestätigt oder korrigiert die Kategorie und benennt bei Bedarf den genauen Menüartikel. Es zählt nichts — es prüft nur, was bereits gezählt wurde.",
+    "who": "Wer analysiert die Aufnahmen?",
+    "whoBody": "Die Zählung übernimmt immer der interne Erkenner von Toskana. Das Modell in LM Studio (oder Claude) analysiert die Einzelbilder ausschließlich in der Prüf-Stufe — es korrigiert das Ergebnis, ersetzt aber nie die Zählung.",
+    "tableAction": "Aufgabe",
+    "tableWho": "Wer",
+    "tableAlways": "Immer aktiv?",
+    "rowCountAction": "Zählen, was die Linie überquert",
+    "rowCountWho": "Interner Erkenner (YOLO / synthetisch)",
+    "rowCountAlways": "Ja — auf jedem Bild",
+    "rowRefineAction": "Kategorie prüfen und korrigieren",
+    "rowRefineWho": "LM Studio (Gemma) oder Claude",
+    "rowRefineAlways": "Optional — nur gezählte Ereignisse",
+    "note": "Auch wenn der KI-Prüfer ausgeschaltet ist, zählt das System ununterbrochen weiter — nur die Genauigkeit der Artikel-Erkennung ist dann etwas geringer.",
+    "settingsLink": "Den KI-Prüfer richten Sie auf der Seite „System“ ein (Anbieter, Modell, Verbindung testen)."
   },
   "auth": {
     "title": "API-Token erforderlich",
