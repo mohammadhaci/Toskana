@@ -31,7 +31,10 @@ import httpx
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_S = 60.0
-MAX_TOKENS = 300
+# Generous ceiling so reasoning models (which spend tokens "thinking" before
+# they answer) still have room to emit the final JSON. Non-reasoning models
+# stop as soon as the short JSON is done, so a high ceiling costs nothing.
+MAX_TOKENS = 2048
 
 
 class RefinerError(Exception):
@@ -316,11 +319,24 @@ class OpenAICompatBackend(_HttpBackend):
             headers["authorization"] = f"Bearer {self._api_key}"
         data = self._post(f"{self._base_url}/chat/completions", headers=headers, body=body)
         try:
-            content = data["choices"][0]["message"]["content"]
+            message = data["choices"][0]["message"]
         except (KeyError, IndexError, TypeError):
             raise RefinerError(
-                f"openai-compatible reply has no choices[0].message.content: {str(data)[:300]}"
+                f"openai-compatible reply has no choices[0].message: {str(data)[:300]}"
             ) from None
+        content = message.get("content") if isinstance(message, dict) else None
+        if not (isinstance(content, str) and content.strip()):
+            # Reasoning models (e.g. Gemma / Qwen via LM Studio) can leave the
+            # standard `content` empty and put their output — including the
+            # JSON verdict — under `reasoning_content` / `reasoning`.
+            for key in ("reasoning_content", "reasoning"):
+                alt = message.get(key) if isinstance(message, dict) else None
+                if isinstance(alt, str) and alt.strip():
+                    content = alt
+                    break
         if not isinstance(content, str) or not content.strip():
-            raise RefinerError("openai-compatible reply content is empty")
+            raise RefinerError(
+                "openai-compatible reply content is empty — if this is a reasoning "
+                "model, give it a higher token budget or turn reasoning off"
+            )
         return parse_refiner_response(content)

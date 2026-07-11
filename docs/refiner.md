@@ -154,9 +154,10 @@ same way; set `refiner_api_key` if the server requires a bearer token.
 |---|---|
 | System page shows provider `off` although configured | Typo in `refiner_provider` (must be `off`, `anthropic` or `openai_compatible`); config validation errors abort startup — check the logs |
 | `anthropic` configured but refiner disabled | No API key found: set `refiner_api_key` or `ANTHROPIC_API_KEY` (a warning is logged at startup) |
-| Failures counter climbing, last error "HTTP 401" | Wrong/expired Anthropic API key |
+| Failures counter climbing, last error "HTTP 401" | Wrong/expired Anthropic API key; for a local server, LM Studio's "Require API key" is on — turn it off in Server Settings, or paste its key into the dashboard's API-key field |
 | Failures counter climbing, last error "unreachable" | Local server not running / wrong `refiner_base_url` (Ollama `:11434`, LM Studio `:1234`, both with `/v1`) |
-| Last error "HTTP 404" on openai_compatible | `refiner_model` doesn't match a model the server has loaded (`ollama list`, LM Studio server page) |
+| Last error "HTTP 404" on openai_compatible | `refiner_model` doesn't match a model the server has loaded (`ollama list`, LM Studio server page — copy the exact "API Model Identifier") |
+| Last error "reply content is empty" | A reasoning model (e.g. Gemma via LM Studio) spent its whole token budget "thinking"; the refiner already asks for 2048 tokens and reads `reasoning_content`, so if it persists, disable the model's reasoning/thinking mode or pick a plain vision model |
 | Last error "reply is not JSON" | The model ignored the JSON instruction — use a stronger vision model (small non-VL models can't read images) |
 | Events stay unrefined, skipped counter climbing | `refiner_only_below_confidence` below the detector's typical confidence, or events have no snapshot (`snapshots_dir` misconfigured) |
 | Queue size keeps growing | `refiner_max_per_minute` too low for the event rate — raise it or lower the confidence threshold so fewer events qualify |

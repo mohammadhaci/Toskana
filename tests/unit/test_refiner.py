@@ -131,7 +131,7 @@ class TestAnthropicBackend:
         assert request.headers["anthropic-version"] == "2023-06-01"
         body = json.loads(request.content)
         assert body["model"] == "claude-haiku-4-5"
-        assert body["max_tokens"] == 300
+        assert body["max_tokens"] == 2048
         (message,) = body["messages"]
         assert message["role"] == "user"
         image_block, text_block = message["content"]
@@ -223,7 +223,7 @@ class TestOpenAICompatBackend:
         assert "authorization" not in request.headers  # no key -> no bearer header
         body = json.loads(request.content)
         assert body["model"] == "qwen2.5vl"
-        assert body["max_tokens"] == 300
+        assert body["max_tokens"] == 2048
         (message,) = body["messages"]
         assert message["role"] == "user"
         image_block, text_block = message["content"]
@@ -261,6 +261,45 @@ class TestOpenAICompatBackend:
 
         backend = OpenAICompatBackend("qwen2.5vl", transport=httpx.MockTransport(handler))
         with pytest.raises(RefinerError, match="choices"):
+            backend.refine(JPEG, CATEGORIES, [])
+
+    def test_reasoning_content_used_when_content_empty(self) -> None:
+        """Reasoning models (Gemma/Qwen via LM Studio) leave `content` empty and
+        put the JSON in `reasoning_content`; we parse it from there."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "",
+                                "reasoning_content": (
+                                    "Let me look... it is a glass of wine.\n"
+                                    '{"category_key": "drink", "menu_item_name": null,'
+                                    ' "confidence": 0.8, "is_item": true}'
+                                ),
+                            }
+                        }
+                    ]
+                },
+            )
+
+        backend = OpenAICompatBackend("gemma-4-e4b", transport=httpx.MockTransport(handler))
+        result = backend.refine(JPEG, CATEGORIES, [])
+        assert result.category_key == "drink"
+        assert result.confidence == pytest.approx(0.8)
+
+    def test_empty_content_and_no_reasoning_raises(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200, json={"choices": [{"message": {"role": "assistant", "content": ""}}]}
+            )
+
+        backend = OpenAICompatBackend("qwen2.5vl", transport=httpx.MockTransport(handler))
+        with pytest.raises(RefinerError, match="empty"):
             backend.refine(JPEG, CATEGORIES, [])
 
     def test_transport_error_counts_as_backend_failure_not_crash(self) -> None:
