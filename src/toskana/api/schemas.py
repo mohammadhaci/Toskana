@@ -622,6 +622,62 @@ class AnalysisJobRead(APIModel):
     finished_ts: int | None = None
 
 
+# -- refiner settings (dashboard-managed, /settings/refiner) ---------------------------------------
+
+RefinerProviderLiteral = Literal["off", "anthropic", "openai_compatible"]
+
+
+class RefinerSettingsRead(APIModel):
+    """Effective refiner settings with the API key masked: only a boolean
+    flag says whether a key is stored — the key itself is never returned."""
+
+    provider: RefinerProviderLiteral
+    model: str
+    base_url: str
+    has_api_key: bool
+    only_below_confidence: float
+    match_menu_items: bool
+    max_per_minute: int
+
+
+class RefinerSettingsUpdate(APIModel):
+    """PUT body. ``api_key``: absent/None = keep the stored key,
+    empty string = clear it, anything else = replace it."""
+
+    provider: RefinerProviderLiteral = "off"
+    model: str = Field(default="claude-haiku-4-5", min_length=1, max_length=200)
+    base_url: str = Field(default="http://localhost:11434/v1", min_length=1, max_length=1000)
+    api_key: str | None = Field(default=None, max_length=512)
+    only_below_confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    match_menu_items: bool = True
+    max_per_minute: int = Field(default=30, ge=0, le=6000)
+
+
+class RefinerSettingsTest(RefinerSettingsUpdate):
+    """POST /settings/refiner/test body: the PUT fields plus whether to fall
+    back to the saved API key when none is posted (default: yes)."""
+
+    use_saved_api_key: bool = True
+
+
+class RefinerTestReply(APIModel):
+    """The model's verdict on the generated test image."""
+
+    category_key: str | None
+    menu_item_name: str | None
+    confidence: float
+    is_item: bool
+
+
+class RefinerTestResult(APIModel):
+    """Connection-test outcome (always HTTP 200 — a failure is ``ok: false``)."""
+
+    ok: bool
+    latency_ms: int | None = None
+    reply: RefinerTestReply | None = None
+    error: str | None = None
+
+
 # -- system ----------------------------------------------------------------------------------------
 
 

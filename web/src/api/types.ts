@@ -478,6 +478,52 @@ export interface RetentionRunResult {
   runs: number;
 }
 
+// -- refiner settings (dashboard-managed) --------------------------------------------
+
+export type RefinerProvider = "off" | "anthropic" | "openai_compatible";
+
+/** GET /settings/refiner — effective settings; the key itself is never returned. */
+export interface RefinerSettings {
+  provider: RefinerProvider;
+  model: string;
+  base_url: string;
+  has_api_key: boolean;
+  only_below_confidence: number;
+  match_menu_items: boolean;
+  max_per_minute: number;
+}
+
+/** PUT body. `api_key`: absent = keep the stored key, "" = clear it. */
+export interface RefinerSettingsUpdate {
+  provider: RefinerProvider;
+  model: string;
+  base_url: string;
+  api_key?: string;
+  only_below_confidence: number;
+  match_menu_items: boolean;
+  max_per_minute: number;
+}
+
+/** POST /settings/refiner/test body: PUT fields + saved-key fallback flag. */
+export interface RefinerSettingsTestRequest extends RefinerSettingsUpdate {
+  use_saved_api_key?: boolean;
+}
+
+export interface RefinerTestReply {
+  category_key: string | null;
+  menu_item_name: string | null;
+  confidence: number;
+  is_item: boolean;
+}
+
+/** Connection-test outcome — always HTTP 200; a failed test is `ok: false`. */
+export interface RefinerTestResult {
+  ok: boolean;
+  latency_ms: number | null;
+  reply: RefinerTestReply | null;
+  error: string | null;
+}
+
 // -- WS /ws/live message shapes ----------------------------------------------------------
 
 export interface LiveCounter {

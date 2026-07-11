@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useSystemHealth, useSystemInfo } from "../api/hooks";
 import type { CameraStatus, RetentionRunResult } from "../api/types";
+import RefinerSettingsCard from "../components/RefinerSettingsCard";
 import { useToast } from "../components/Toast";
 import { Badge, Card, EmptyState, Skeleton } from "../components/ui";
 import { formatBytes, formatDateTime } from "../lib/format";
@@ -189,6 +190,8 @@ export default function SystemPage() {
           </dl>
         )}
       </Card>
+
+      <RefinerSettingsCard />
 
       <Card
         title={

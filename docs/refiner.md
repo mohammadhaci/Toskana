@@ -44,8 +44,16 @@ last error) is visible on the System page and in `GET /api/system/health`.
 
 ## Configuration
 
-All knobs live in `config.yaml` (or `TOSKANA_REFINER_*` environment
-variables):
+The preferred way is the **dashboard**: the System page's "KI-Prüfer –
+Einstellungen" card edits provider, model, base URL, API key, confidence
+threshold, menu matching and the rate limit, offers a "Test connection"
+probe, and applies changes **immediately** (persisted in the `app_settings`
+table — no restart, no file edits).
+
+Precedence: a dashboard-saved row **overrides** the `config.yaml` values
+below entirely; without one, `config.yaml` (or `TOSKANA_REFINER_*`
+environment variables) applies. `ANTHROPIC_API_KEY` in the environment
+stays the final fallback for the API key either way.
 
 ```yaml
 refiner_provider: off            # off | anthropic | openai_compatible

@@ -28,6 +28,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from toskana.db.base import Base
 
 
+class AppSetting(Base):
+    """Dashboard-managed key/value settings (JSON blobs), e.g. the AI Event
+    Refiner configuration under key ``refiner``. Values stored here override
+    the corresponding ``config.yaml`` fields (see ``toskana.settings_store``)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+
+
 class Restaurant(Base):
     """A tenant: one restaurant (site) with its own menu, cameras and models."""
 

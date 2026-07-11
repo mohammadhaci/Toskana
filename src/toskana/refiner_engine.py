@@ -3,10 +3,13 @@
 The :class:`RefinerEngine` subscribes to the ``crossing`` bus topic (like
 the M8 DedupEngine) and processes events on one worker thread:
 
-1. skip unless ``refiner_provider`` is enabled; skip events whose detector
-   confidence is already >= ``refiner_only_below_confidence`` (1.0 default
+1. skip unless the refiner provider is enabled; skip events whose detector
+   confidence is already >= ``only_below_confidence`` (1.0 default
    = refine everything; lowering it to e.g. 0.65 cuts LLM cost by only
-   double-checking uncertain detections);
+   double-checking uncertain detections). Settings come from the dashboard
+   (``app_settings`` row, see :mod:`toskana.settings_store`) with the
+   ``refiner_*`` config fields as fallback, and can be swapped at runtime
+   via :meth:`RefinerEngine.reconfigure`;
 2. load the event's snapshot JPEG, crop it to the item's bounding box
    (``bbox_px`` in the payload, expanded by ~15 %) and re-encode;
 3. call the configured :class:`~toskana.refiner.RefinerBackend` with the
@@ -49,6 +52,11 @@ from toskana.refiner import (
     RefinerError,
     RefinerResult,
 )
+from toskana.settings_store import (
+    RefinerSettings,
+    effective_refiner_settings,
+    refiner_settings_from_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,27 +76,36 @@ PROVIDER_ANTHROPIC = "anthropic"
 PROVIDER_OPENAI_COMPAT = "openai_compatible"
 
 
-def build_backend(config: AppConfig) -> RefinerBackend | None:
-    """The configured backend instance, or None when the refiner is off."""
-    provider = config.refiner_provider
-    if provider == PROVIDER_ANTHROPIC:
+def build_backend_from_settings(settings: RefinerSettings) -> RefinerBackend | None:
+    """The backend instance for the given settings, or None when off.
+
+    ``ANTHROPIC_API_KEY`` in the environment stays the final fallback for
+    the Anthropic API key when no key is stored/configured.
+    """
+    if settings.provider == PROVIDER_ANTHROPIC:
         import os
 
-        api_key = config.refiner_api_key or os.environ.get("ANTHROPIC_API_KEY")
+        api_key = settings.api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
             logger.warning(
-                "refiner_provider=anthropic but no API key configured "
-                "(set refiner_api_key or ANTHROPIC_API_KEY); refiner disabled"
+                "refiner provider=anthropic but no API key configured "
+                "(set it in the dashboard, refiner_api_key or ANTHROPIC_API_KEY); "
+                "refiner disabled"
             )
             return None
-        return AnthropicBackend(config.refiner_model, api_key=api_key)
-    if provider == PROVIDER_OPENAI_COMPAT:
+        return AnthropicBackend(settings.model, api_key=api_key)
+    if settings.provider == PROVIDER_OPENAI_COMPAT:
         return OpenAICompatBackend(
-            config.refiner_model,
-            base_url=config.refiner_base_url,
-            api_key=config.refiner_api_key,
+            settings.model,
+            base_url=settings.base_url,
+            api_key=settings.api_key,
         )
     return None
+
+
+def build_backend(config: AppConfig) -> RefinerBackend | None:
+    """The config.yaml-configured backend instance, or None when off."""
+    return build_backend_from_settings(refiner_settings_from_config(config))
 
 
 @dataclass
@@ -126,19 +143,22 @@ class RefinerEngine:
         bus: EventBus,
         session_factory: sessionmaker[Session],
         backend: RefinerBackend | None = None,
+        settings: RefinerSettings | None = None,
     ) -> None:
         self._config = config
         self._bus = bus
         self._session_factory = session_factory
-        self._backend = backend if backend is not None else build_backend(config)
+        # Effective settings: dashboard row (app_settings) overrides config.yaml.
+        if settings is None:
+            settings = effective_refiner_settings(session_factory, config)
+        self._settings = settings
+        self._backend = backend if backend is not None else build_backend_from_settings(settings)
         self._snapshots_dir = Path(config.snapshots_dir)
         self._queue: queue.Queue[Any] = queue.Queue(maxsize=_MAX_QUEUE)
         self._thread: threading.Thread | None = None
         self._unsubscribes: list[Any] = []
         self._stop_event = threading.Event()
-        self._min_interval_s = (
-            60.0 / config.refiner_max_per_minute if config.refiner_max_per_minute > 0 else 0.0
-        )
+        self._min_interval_s = self._interval_s(self._settings)
         self._next_call_at = 0.0
         self._catalog_cache: dict[int, tuple[float, _Catalog]] = {}
         self._lock = threading.Lock()
@@ -147,16 +167,23 @@ class RefinerEngine:
         self._skipped = 0
         self._last_error: str | None = None
 
+    @staticmethod
+    def _interval_s(settings: RefinerSettings) -> float:
+        return 60.0 / settings.max_per_minute if settings.max_per_minute > 0 else 0.0
+
     @property
     def enabled(self) -> bool:
-        return self._config.refiner_provider != PROVIDER_OFF and self._backend is not None
+        return self._settings.provider != PROVIDER_OFF and self._backend is not None
 
     # -- lifecycle -----------------------------------------------------------
 
     def start(self) -> None:
-        """Subscribe + start the worker; a no-op when the refiner is off."""
-        if not self.enabled:
-            return
+        """Subscribe + start the worker thread.
+
+        The worker always runs (even with provider=off, where it idles) so
+        a dashboard :meth:`reconfigure` can enable the refiner at runtime
+        without a restart.
+        """
         if self._thread is not None:
             raise RuntimeError("RefinerEngine already started")
         self._stop_event.clear()
@@ -176,6 +203,29 @@ class RefinerEngine:
         self._thread.join()
         self._thread = None
 
+    # -- runtime reconfiguration -----------------------------------------------
+
+    def reconfigure(self, settings: RefinerSettings) -> None:
+        """Apply new settings at runtime: swap the backend + thresholds/rate.
+
+        Thread-safe; keeps the queue and counters, resets ``last_error``.
+        The old backend is closed — a refine call in flight on the worker
+        thread may fail once (counted, never raised, like any backend error).
+        """
+        new_backend = build_backend_from_settings(settings)
+        with self._lock:
+            old_backend = self._backend
+            self._settings = settings
+            self._backend = new_backend
+            self._min_interval_s = self._interval_s(settings)
+            self._next_call_at = 0.0
+            self._last_error = None
+        if old_backend is not None and old_backend is not new_backend:
+            close = getattr(old_backend, "close", None)
+            if callable(close):
+                close()
+        logger.info("refiner reconfigured: provider=%s model=%s", settings.provider, settings.model)
+
     # -- bus callback (pipeline threads: enqueue only) --------------------------
 
     def _on_crossing(self, payload: dict[str, Any]) -> None:
@@ -192,7 +242,7 @@ class RefinerEngine:
     def stats(self) -> RefinerStats:
         with self._lock:
             return RefinerStats(
-                provider=self._config.refiner_provider,
+                provider=self._settings.provider,
                 model=self._backend.model if self._backend is not None else None,
                 enabled=self.enabled,
                 queue_size=self._queue.qsize(),
@@ -216,14 +266,12 @@ class RefinerEngine:
                 logger.exception("refiner failed on event %s", item.get("id"))
 
     def _process(self, payload: dict[str, Any]) -> None:
+        settings = self._settings
         backend = self._backend
-        if backend is None:
-            return
+        if settings.provider == PROVIDER_OFF or backend is None:
+            return  # idle worker: the refiner is (currently) off
         confidence = payload.get("confidence")
-        if (
-            isinstance(confidence, (int, float))
-            and confidence >= self._config.refiner_only_below_confidence
-        ):
+        if isinstance(confidence, (int, float)) and confidence >= settings.only_below_confidence:
             self._count_skip()
             return
         snapshot_path = payload.get("snapshot_path")
@@ -246,7 +294,7 @@ class RefinerEngine:
             return
 
         self._rate_limit()
-        menu_items = catalog.menu_names if self._config.refiner_match_menu_items else []
+        menu_items = catalog.menu_names if settings.match_menu_items else []
         try:
             result = backend.refine(image_jpeg, catalog.categories, menu_items)
         except RefinerError as exc:
@@ -254,7 +302,7 @@ class RefinerEngine:
             logger.warning("refiner backend failed for event %s: %s", payload.get("id"), exc)
             return
 
-        self._apply(payload, result, catalog)
+        self._apply(payload, result, catalog, backend)
 
     # -- image ----------------------------------------------------------------------
 
@@ -328,9 +376,13 @@ class RefinerEngine:
 
     # -- applying the verdict -------------------------------------------------------------
 
-    def _apply(self, payload: dict[str, Any], result: RefinerResult, catalog: _Catalog) -> None:
-        backend = self._backend
-        assert backend is not None
+    def _apply(
+        self,
+        payload: dict[str, Any],
+        result: RefinerResult,
+        catalog: _Catalog,
+        backend: RefinerBackend,
+    ) -> None:
         event_id = payload.get("id")
         if not isinstance(event_id, str):
             self._count_failure("crossing payload without event id")

@@ -27,6 +27,7 @@ from toskana.db.models import (
 )
 
 EXPECTED_TABLES = {
+    "app_settings",
     "restaurants",
     "cameras",
     "exit_groups",

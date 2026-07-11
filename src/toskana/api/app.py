@@ -143,7 +143,7 @@ def create_app(config: AppConfig, *, start_pipelines: bool = True) -> FastAPI:
         writer.start()
         if dedup is not None:
             dedup.start()  # after writer.start(): inserts queue before demotions
-        refiner.start()  # after writer: event rows exist before refinement (no-op when off)
+        refiner.start()  # after writer: rows exist first (idles when off; dashboard can enable)
         broadcaster.start(asyncio.get_running_loop())
         retention.start()  # daily snapshot-retention pass (GDPR)
         if notifier is not None:

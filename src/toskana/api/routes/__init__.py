@@ -16,6 +16,7 @@ from toskana.api.routes import (
     menu_items,
     models_registry,
     reconcile,
+    refiner_settings,
     restaurants,
     sessions,
     stats,
@@ -40,3 +41,4 @@ api_router.include_router(reconcile.router)
 api_router.include_router(analysis.router)
 api_router.include_router(stream.router)
 api_router.include_router(system.router)
+api_router.include_router(refiner_settings.router)

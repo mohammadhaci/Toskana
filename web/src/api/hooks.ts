@@ -39,6 +39,11 @@ export function useSystemHealth(intervalMs = 5000) {
   });
 }
 
+/** Dashboard-managed AI Event Refiner settings (masked; no api_key). */
+export function useRefinerSettings() {
+  return useQuery({ queryKey: ["settings", "refiner"], queryFn: api.getRefinerSettings });
+}
+
 // -- reads -------------------------------------------------------------------
 
 export function useRestaurants() {

@@ -32,6 +32,10 @@ import type {
   Page,
   ReconcileReport,
   ReconcileRun,
+  RefinerSettings,
+  RefinerSettingsTestRequest,
+  RefinerSettingsUpdate,
+  RefinerTestResult,
   Restaurant,
   RestaurantCreate,
   RestaurantUpdate,
@@ -104,6 +108,13 @@ export const api = {
   systemInfo: () => request<SystemInfo>("/system/info"),
   systemHealth: () => request<SystemHealth>("/system/health"),
   runRetention: () => request<RetentionRunResult>("/system/retention/run", { method: "POST" }),
+
+  // -- refiner settings (dashboard-managed; applied without restart) ------------
+  getRefinerSettings: () => request<RefinerSettings>("/settings/refiner"),
+  updateRefinerSettings: (body: RefinerSettingsUpdate) =>
+    request<RefinerSettings>("/settings/refiner", json(body, "PUT")),
+  testRefinerSettings: (body: RefinerSettingsTestRequest) =>
+    request<RefinerTestResult>("/settings/refiner/test", json(body, "POST")),
 
   // -- restaurants ------------------------------------------------------------
   listRestaurants: () => request<Page<Restaurant>>(`/restaurants${PAGE_ALL}`),

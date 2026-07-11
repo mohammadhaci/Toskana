@@ -20,11 +20,16 @@ from toskana.analysis import AnalysisJobManager
 from toskana.config import AppConfig
 from toskana.db.models import Camera, Category, ExitGroup, Line, ModelRegistry, Restaurant
 from toskana.events.bus import EventBus
+from toskana.refiner_engine import RefinerEngine
 from toskana.vision.manager import PipelineManager
 
 
 def get_config(request: Request) -> AppConfig:
     return request.app.state.config  # type: ignore[no-any-return]
+
+
+def get_refiner(request: Request) -> RefinerEngine:
+    return request.app.state.refiner  # type: ignore[no-any-return]
 
 
 def get_bus(request: Request) -> EventBus:
@@ -47,6 +52,7 @@ def get_session(request: Request) -> Iterator[Session]:
 
 SessionDep = Annotated[Session, Depends(get_session)]
 ConfigDep = Annotated[AppConfig, Depends(get_config)]
+RefinerDep = Annotated[RefinerEngine, Depends(get_refiner)]
 BusDep = Annotated[EventBus, Depends(get_bus)]
 ManagerDep = Annotated[PipelineManager, Depends(get_manager)]
 AnalysisDep = Annotated[AnalysisJobManager, Depends(get_analysis)]
