@@ -31,6 +31,62 @@ logger = logging.getLogger(__name__)
 SOURCE_TYPES = frozenset({"file", "usb", "rtsp"})
 LIVE_SOURCE_TYPES = frozenset({"usb", "rtsp"})
 
+#: Video-page hosts whose URLs must be resolved to a direct stream via yt-dlp
+#: (a plain http(s) URL to an .m3u8/.mp4 opens directly in OpenCV/FFmpeg).
+WEB_PAGE_STREAM_HOSTS = (
+    "youtube.com",
+    "youtu.be",
+    "twitch.tv",
+    "vimeo.com",
+    "facebook.com",
+    "dailymotion.com",
+)
+
+
+def is_web_page_stream(source: str) -> bool:
+    """True for http(s) links to a video *page* (YouTube live etc.)."""
+    if not source.startswith(("http://", "https://")):
+        return False
+    host = source.split("//", 1)[1].split("/", 1)[0].lower()
+    return any(host == h or host.endswith("." + h) for h in WEB_PAGE_STREAM_HOSTS)
+
+
+def resolve_web_stream_url(source: str) -> str:
+    """Resolve a video-page URL to its direct media/manifest URL via yt-dlp.
+
+    Called on every (re)open — live manifest URLs expire, so reconnects
+    re-resolve. Raises ``SourceOpenError`` with an actionable message when
+    yt-dlp is missing or resolution fails.
+    """
+    try:
+        import yt_dlp
+    except ImportError as exc:  # pragma: no cover - environment-specific
+        raise SourceOpenError(
+            "web stream links need the yt-dlp package — install with: pip install yt-dlp"
+        ) from exc
+
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "format": "best[height<=720]/best",
+        "socket_timeout": 15,
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(source, download=False)
+    except Exception as exc:
+        raise SourceOpenError(f"cannot resolve web stream {source!r}: {exc}") from exc
+    if not info:
+        raise SourceOpenError(f"cannot resolve web stream {source!r}: no stream info")
+    direct = info.get("url") or next(
+        (f["url"] for f in reversed(info.get("formats") or []) if f.get("url")), None
+    )
+    if not direct:
+        raise SourceOpenError(f"cannot resolve web stream {source!r}: no playable format")
+    return str(direct)
+
+
 #: Callback signature: ``on_gap(from_ts_monotonic, to_ts_monotonic, reason)``.
 GapCallback = Callable[[float, float, str], None]
 
@@ -176,7 +232,16 @@ class VideoSource:
         if self._source_type == "usb":
             return cv2.VideoCapture(int(self._source))
         if self._source_type == "rtsp":
-            return cv2.VideoCapture(str(self._source), cv2.CAP_FFMPEG)
+            source = str(self._source)
+            if is_web_page_stream(source):
+                # Re-resolved on every open: live manifests expire, and the
+                # reconnect path lands here again with a fresh resolution.
+                try:
+                    source = resolve_web_stream_url(source)
+                except SourceOpenError as exc:
+                    logger.warning("%s", exc)
+                    return cv2.VideoCapture("")  # unopened -> normal retry path
+            return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
         return cv2.VideoCapture(str(self._source))
 
     def _open(self) -> bool:
