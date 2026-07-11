@@ -27,6 +27,9 @@ function CameraCard({ camera, onExpand }: { camera: Camera; onExpand: (camera: C
           {status && running && status.fps > 0 && (
             <Badge>{t("live.fps", { fps: status.fps.toFixed(1) })}</Badge>
           )}
+          {running && status?.backend === "synthetic" && camera.source_type !== "file" && (
+            <Badge tone="warn">{t("live.demoDetector")}</Badge>
+          )}
           <Badge tone={running ? "good" : "bad"}>{running ? t("live.running") : t("live.stopped")}</Badge>
           {expandable && (
             <button

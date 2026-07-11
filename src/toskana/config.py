@@ -50,7 +50,10 @@ class AppConfig(BaseSettings):
     max_url_video_seconds: int = 3600  # URL analysis: refuse videos longer than 1 h
     device: str = "auto"  # auto | cpu | cuda | mps
     log_level: str = "INFO"
-    detector_backend: str = "synthetic"  # synthetic | yolo
+    # Global detector default: 'auto' resolves to yolo when ultralytics is
+    # installed, else synthetic. Per-camera detector_backend overrides this
+    # (seeded demo file-cameras are pinned to synthetic).
+    detector_backend: str = "auto"  # auto | synthetic | yolo
     loop_file_sources: bool = True  # demo mode: file cameras loop (paced) forever
     # Hardware tuning for the YOLO backend: cpu (imgsz 480, every 2nd frame),
     # gpu (imgsz 640, every frame) or auto (gpu when CUDA is available).

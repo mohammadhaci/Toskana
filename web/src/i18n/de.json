@@ -96,7 +96,8 @@
     "gap": "Datenlücke: Kamera {{camera}} ({{reason}})",
     "wsReconnecting": "Live-Verbindung getrennt — Wiederaufbau läuft …",
     "expand": "Vergrößern",
-    "close": "Schließen"
+    "close": "Schließen",
+    "demoDetector": "Demo-Detektor aktiv — für echte Kameras YOLO verwenden"
   },
   "stats": {
     "title": "Statistiken",

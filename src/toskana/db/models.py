@@ -110,6 +110,9 @@ class Camera(Base):
     model_id: Mapped[int | None] = mapped_column(
         ForeignKey("models_registry.id", ondelete="SET NULL"), default=None
     )  # per-camera model override; NULL = restaurant's active model
+    detector_backend: Mapped[str | None] = mapped_column(
+        String(16), default=None
+    )  # per-camera override: synthetic | yolo; NULL = resolved global default
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="cameras")

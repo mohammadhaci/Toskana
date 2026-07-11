@@ -120,6 +120,7 @@ class CameraCreate(APIModel):
     is_primary_in_group: bool = False
     target_fps: int = Field(default=15, ge=1, le=120)
     model_id: int | None = None
+    detector_backend: Literal["synthetic", "yolo"] | None = None
     enabled: bool = True
 
     @model_validator(mode="after")
@@ -137,6 +138,7 @@ class CameraUpdate(APIModel):
     is_primary_in_group: bool | None = None
     target_fps: int | None = Field(default=None, ge=1, le=120)
     model_id: int | None = None
+    detector_backend: Literal["synthetic", "yolo"] | None = None
     enabled: bool | None = None
 
 
@@ -150,6 +152,7 @@ class CameraRead(ORMModel):
     is_primary_in_group: bool
     target_fps: int
     model_id: int | None
+    detector_backend: str | None
     enabled: bool
 
 

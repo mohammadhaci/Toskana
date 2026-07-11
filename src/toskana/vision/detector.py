@@ -98,3 +98,16 @@ class TrackingBackend(Protocol):
     def detect_and_track(self, frame: np.ndarray) -> list[TrackedDetection]:
         """Detect objects in a single BGR frame and assign track ids."""
         ...
+
+
+def resolve_detector_backend(configured: str) -> str:
+    """Resolve the configured global detector default to a concrete backend.
+
+    ``auto`` picks ``yolo`` when ultralytics is installed (the ``[ml]``
+    extra), otherwise ``synthetic``. Explicit values pass through.
+    """
+    if configured != "auto":
+        return configured
+    from importlib.util import find_spec
+
+    return "yolo" if find_spec("ultralytics") is not None else "synthetic"

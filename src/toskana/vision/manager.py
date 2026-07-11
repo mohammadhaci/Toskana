@@ -40,7 +40,7 @@ from toskana.db.models import (
 )
 from toskana.events.bus import TOPIC_GAP, EventBus
 from toskana.vision.capture import SourceOpenError
-from toskana.vision.detector import TrackedDetection
+from toskana.vision.detector import TrackedDetection, resolve_detector_backend
 from toskana.vision.drift import DriftDetector
 from toskana.vision.line_crossing import LineSpec
 from toskana.vision.mapping import MappingRule, MenuItemInfo
@@ -412,7 +412,7 @@ class PipelineManager:
                 .order_by(Line.id)
             )
         )
-        backend = self._config.detector_backend
+        backend = camera.detector_backend or resolve_detector_backend(self._config.detector_backend)
         model = self._effective_model(session, camera)
         if backend == "synthetic":
             rules = self._synthetic_rules(session, camera.restaurant_id)

@@ -96,7 +96,8 @@
     "gap": "Data gap: camera {{camera}} ({{reason}})",
     "wsReconnecting": "Live connection lost — reconnecting …",
     "expand": "Expand",
-    "close": "Close"
+    "close": "Close",
+    "demoDetector": "Demo detector active — use YOLO for real cameras"
   },
   "stats": {
     "title": "Statistics",

@@ -69,6 +69,7 @@ export interface Camera {
   is_primary_in_group: boolean;
   target_fps: number;
   model_id: number | null;
+  detector_backend: string | null;
   enabled: boolean;
 }
 

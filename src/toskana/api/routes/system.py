@@ -12,6 +12,7 @@ from toskana import __version__
 from toskana.api import schemas
 from toskana.api.deps import ConfigDep, ManagerDep, SessionDep
 from toskana.db.models import Restaurant
+from toskana.vision.detector import resolve_detector_backend
 from toskana.vision.presets import resolve_preset
 
 router = APIRouter(prefix="/system", tags=["system"])
@@ -90,7 +91,7 @@ def info(session: SessionDep, config: ConfigDep) -> schemas.SystemInfo:
         db_size_bytes=db_size,
         torch_available=torch_available,
         cuda_available=cuda_available,
-        detector_backend=config.detector_backend,
+        detector_backend=resolve_detector_backend(config.detector_backend),
         device=config.device,
         loop_file_sources=config.loop_file_sources,
         snapshots_dir=config.snapshots_dir,
