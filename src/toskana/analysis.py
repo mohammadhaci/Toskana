@@ -319,6 +319,20 @@ class AnalysisJobManager:
             "retries": 0,
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
+            probe = ydl.extract_info(url, download=False)
+            assert probe is not None
+            if probe.get("is_live"):
+                raise ValueError(
+                    "live streams cannot be analyzed — use a recorded video "
+                    "(or connect the stream as an RTSP camera instead)"
+                )
+            duration = probe.get("duration")
+            if duration and duration > self._config.max_url_video_seconds:
+                raise ValueError(
+                    f"video is {int(duration) // 60} min long — the limit for URL "
+                    f"analysis is {self._config.max_url_video_seconds // 60} min; "
+                    "download a shorter clip or upload a trimmed file"
+                )
             info = ydl.extract_info(url, download=True)
             assert info is not None
             filename = ydl.prepare_filename(info)

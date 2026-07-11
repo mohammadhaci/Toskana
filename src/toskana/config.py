@@ -47,6 +47,7 @@ class AppConfig(BaseSettings):
     # from URLs (yt-dlp) too. Uploads larger than max_upload_bytes are rejected.
     uploads_dir: str = "./data/uploads"
     max_upload_bytes: int = 2 * 1024**3  # 2 GiB
+    max_url_video_seconds: int = 3600  # URL analysis: refuse videos longer than 1 h
     device: str = "auto"  # auto | cpu | cuda | mps
     log_level: str = "INFO"
     detector_backend: str = "synthetic"  # synthetic | yolo
